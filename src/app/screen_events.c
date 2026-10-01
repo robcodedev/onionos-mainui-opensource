@@ -129,6 +129,7 @@ bool mainui_screen_settings_open(MainUIApp *ui, SDLKey key)
         }
         if (ui->settings.rows[ui->settings.selected] == SET_SOUND) {
             mainui_audio_volume(ui->settings.values[SET_SOUND]);
+            mainui_audio_change();
         }
     }
     else if (key == SDLK_RETURN && ui->settings.count &&
