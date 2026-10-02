@@ -3,6 +3,7 @@
 #include "app/options.h"
 #include "app/positions.h"
 #include "app/render.h"
+#include "cJSON.h"
 #include "localization/language.h"
 #include "platform/audio.h"
 #include "platform/launch.h"
@@ -17,6 +18,64 @@
 #include <linux/fb.h>
 #include <sys/ioctl.h>
 #include <unistd.h>
+
+/* Onion's Search app hands its results back through state.json in the handoff
+ * directory: stock MainUI's navigation stack, whose last type 5 frame names the
+ * console in "emuname" (" Search " for the results). Open that console once,
+ * then move the file aside so later restarts start normally. Open MainUI's own
+ * state.json has no "emuname" and is ignored. Any problem keeps the normal start.
+ */
+static void open_state_console(MainUIApp *ui)
+{
+    char path[1024], used[1040];
+    const char *dir = ui->handoff_dir ? ui->handoff_dir : "/tmp";
+    int n = snprintf(path, sizeof path, "%s/state.json", dir);
+    if (n < 0 || n >= (int)sizeof path) {
+        return;
+    }
+    FILE *file = fopen(path, "rb");
+    if (!file) {
+        return;
+    }
+    char *text = malloc(65536);
+    if (!text) {
+        fclose(file);
+        return;
+    }
+    size_t bytes = fread(text, 1, 65535, file);
+    fclose(file);
+    text[bytes] = 0;
+    cJSON *root = cJSON_Parse(text);
+    free(text);
+    const cJSON *list = root ? cJSON_GetObjectItemCaseSensitive(root, "list") : NULL;
+    int count = cJSON_IsArray(list) ? cJSON_GetArraySize(list) : 0;
+    const cJSON *last = count > 0 ? cJSON_GetArrayItem(list, count - 1) : NULL;
+    const cJSON *type = last ? cJSON_GetObjectItemCaseSensitive(last, "type") : NULL;
+    const cJSON *name = last ? cJSON_GetObjectItemCaseSensitive(last, "emuname") : NULL;
+    if (cJSON_IsNumber(type) && type->valueint == 5 && cJSON_IsString(name) && name->valuestring) {
+        bool opened = false;
+        for (int i = 0; i < ui->catalog->pages[0].count; i++) {
+            if (!strcmp(ui->catalog->pages[0].entries[i].label, name->valuestring)) {
+                opened = mainui_catalog_enter(ui->catalog, i);
+                if (opened) {
+                    mainui_grid_restore(&ui->catalog->pages[0].view, ui->catalog->pages[0].count, i,
+                                        4, 2);
+                    /* Start in that console, as with --system. */
+                    static char console_name[256];
+                    snprintf(console_name, sizeof console_name, "%s", name->valuestring);
+                    ui->system_name = console_name;
+                }
+                break;
+            }
+        }
+        fprintf(stderr, "state.json console \"%s\": %s\n", name->valuestring,
+                opened ? "opened" : "not found");
+        if (snprintf(used, sizeof used, "%s.used", path) < (int)sizeof used) {
+            rename(path, used);
+        }
+    }
+    cJSON_Delete(root);
+}
 #endif
 
 /* Temporary startup diagnostics. Use 64-bit milliseconds on the 32-bit device. */
@@ -227,6 +286,9 @@ int mainui_setup_session(MainUIApp *ui, int argc, char **argv)
             return 2;
         }
         mainui_grid_restore(&ui->catalog->pages[0].view, ui->catalog->pages[0].count, found, 4, 2);
+    }
+    else if (ui->catalog && !ui->snapshot) {
+        open_state_console(ui);
     }
     return -1;
 }
