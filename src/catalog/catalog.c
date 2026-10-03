@@ -1128,11 +1128,21 @@ static bool cache_needs_repair(const char *file, const char *table)
     return missing || (result & 255) == SQLITE_CORRUPT || (result & 255) == SQLITE_NOTADB;
 }
 
-static bool search_database(const MainUICatalog *catalog, const char *root)
+bool mainui_search_root(const char *sd, const char *root)
 {
     char path[MAINUI_PATH_MAX];
-    return mainui_catalog_path(path, catalog->sd, catalog->sd, "App/Search/data") &&
-           !strcmp(path, root);
+    return root && mainui_catalog_path(path, sd, sd, "App/Search/data") && !strcmp(path, root);
+}
+
+static bool search_database(const MainUICatalog *catalog, const char *root)
+{
+    return mainui_search_root(catalog->sd, root);
+}
+
+bool mainui_catalog_search_system(const MainUICatalog *catalog, int index)
+{
+    return index >= 0 && index < catalog->pages[0].count &&
+           mainui_search_root(catalog->sd, catalog->pages[0].entries[index].path);
 }
 
 /* Console roots browsed by scanning for the rest of the session. Changed on

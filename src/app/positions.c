@@ -103,10 +103,7 @@ static bool number(const cJSON *item, const char *key, int *value)
  * Browser page views still preserve parents while backing out of a result. */
 static bool search_results(const MainUICatalog *catalog)
 {
-    char root[4096];
-    return catalog && catalog->depth &&
-           mainui_catalog_path(root, catalog->sd, catalog->sd, "App/Search/data") &&
-           !strcmp(root, catalog->pages[1].path);
+    return catalog && mainui_catalog_search_results(catalog);
 }
 
 void mainui_positions_restore(const MainUICatalog *catalog, MainUIViewport *view, int rows)

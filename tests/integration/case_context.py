@@ -2,6 +2,7 @@
 """Exercise real SELECT shortcuts, refresh, and six-row popup asset expansion."""
 from contextlib import closing
 import json
+import shutil
 import os
 from pathlib import Path
 import sqlite3
@@ -141,10 +142,15 @@ with closing(sqlite3.connect(other_cache)) as db:
     assert db.execute('select count(*) from OTHER_roms').fetchone()[0] == 1
 fc_before = cache.read_bytes()
 
-# The synthetic console retains only the global grid action.
+# The synthetic console retains only the global grid action. It is Search by
+# its data folder, as Onion creates it; the label alone does not make it so.
+# Its rows are FC's files, as when the fixture borrowed Roms/FC.
 (SD / 'Emu/SEARCH').mkdir()
+shutil.copytree(SD / 'Roms/FC', SD / 'App/Search/data',
+                ignore=shutil.ignore_patterns('*_cache6.db*'))
 (SD / 'Emu/SEARCH/config.json').write_text(json.dumps(dict(
-    label=' Search ', rompath='../../Roms/FC', extlist='nes')))
+    label=' Search ', rompath='../../App/Search/data', launch='../../App/Search/launch.sh',
+    extlist='nes')))
 search_grid = capture('synthetic-search-grid', 'E')
 search_popup = capture('synthetic-search-global-popup', 'ES')
 assert search_grid.tobytes() != search_popup.tobytes()

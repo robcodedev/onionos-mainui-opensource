@@ -87,6 +87,12 @@ bool mainui_catalog_page_damaged(const MainUICatalog *catalog);
 /* The list shows Search's results: a virtual database that neither a rebuild
  * nor a folder scan can reproduce. */
 bool mainui_catalog_search_results(const MainUICatalog *catalog);
+/* The one test for Onion's Search: a console whose ROM root is the SD card's
+ * App/Search/data, where Search writes its results database. Its label and
+ * launcher are not used: a theme or a config can change those. */
+bool mainui_search_root(const char *sd, const char *root);
+/* Console `index` of the grid is the Search system (see mainui_search_root). */
+bool mainui_catalog_search_system(const MainUICatalog *catalog, int index);
 /* Borrow one row by absolute index. A later accessor may replace the current
  * 64-row cache window; never retain its pointer across accessor/navigation calls.
  * NULL reports an invalid index; cache read failures also set catalog->error.

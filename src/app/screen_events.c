@@ -643,7 +643,7 @@ static bool screen_context_open_key(MainUIApp *ui, SDLKey key)
         ui->catalog && ui->catalog->depth ? ui->catalog->pages[0].view.selected : ui->view.selected;
     bool refreshable = ui->catalog && system_index >= 0 &&
                        system_index < ui->catalog->pages[0].count &&
-                       strcmp(ui->catalog->pages[0].entries[system_index].label, " Search ");
+                       !mainui_catalog_search_system(ui->catalog, system_index);
     /* Search is an emulated console, not a ROM collection to refresh. */
     if (ui->apps) {
         ui->context_record = mainui_catalog_record(ui->apps, ui->apps_view.selected);

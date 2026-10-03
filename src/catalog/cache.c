@@ -179,9 +179,7 @@ bool mainui_cache_open(MainUICache **out, const char *file, const char *table, c
     cache->stamp = mainui_file_stamp(file);
     strcpy(cache->sd_root, sd_root);
     strcpy(cache->rom_root, rom_root);
-    char search_root[MAINUI_PATH_MAX];
-    cache->search_results = mainui_catalog_path(search_root, sd_root, sd_root, "App/Search/data") &&
-                            !strcmp(rom_root, search_root);
+    cache->search_results = mainui_search_root(sd_root, rom_root);
 
     /* Read-only mode also prevents creation of a missing database. Connections,
      * statements and progress callbacks have one owner; worker handoff follows a join.

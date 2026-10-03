@@ -451,11 +451,7 @@ void mainui_restore_session(MainUIApp *ui)
                 mainui_catalog_back(ui->games);
             }
             for (int i = 0; i < ui->games->pages[0].count; ++i) {
-                const MainUIEntry *entry = &ui->games->pages[0].entries[i];
-                char launcher[4096];
-                if (entry->launch &&
-                    mainui_catalog_path(launcher, ui->sd, ui->sd, tool->valuestring) &&
-                    !strcmp(entry->launch, launcher)) {
+                if (mainui_catalog_search_system(ui->games, i)) {
                     MainUIViewport target;
                     mainui_grid_restore(&target, ui->games->pages[0].count, i, 4, 2);
                     if (mainui_browser_enter(ui->games, &target, ui->config.rows)) {
