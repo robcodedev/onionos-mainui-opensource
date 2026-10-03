@@ -836,7 +836,7 @@ static bool rom_root_ready(MainUICatalog *catalog, const char *root)
     return false;
 }
 
-static bool build_cache_locked(MainUICatalog *catalog, int system, bool replace)
+static bool build_cache_locked(MainUICatalog *catalog, int system, bool replace, bool abandon)
 {
     if (mainui_cancelled(catalog->cancel) || system < 0 || system >= catalog->pages[0].count) {
         return false;
@@ -857,12 +857,12 @@ static bool build_cache_locked(MainUICatalog *catalog, int system, bool replace)
     if (length < 0 || length >= (int)sizeof table) {
         return false;
     }
-    /* A refused recovery never blocks Refresh roms (replace): drop only the
+    /* A refused recovery never blocks Refresh roms (abandon): drop only the
      * journal and rebuild from the files as they are. Both ROM copies stay.
      * Automatic builds and repairs never run while a journal exists. */
     bool recovered = mainui_delete_recover(file, table, entry->path, catalog->sd) &&
                      !mainui_delete_journal_present(file);
-    if (!recovered && (!replace || !mainui_delete_abandon(file, catalog->sd))) {
+    if (!recovered && (!abandon || !mainui_delete_abandon(file, catalog->sd))) {
         snprintf(catalog->error, sizeof catalog->error, "Pending ROM deletion requires recovery");
         return false;
     }
@@ -987,7 +987,7 @@ static bool build_cache_locked(MainUICatalog *catalog, int system, bool replace)
     return ok;
 }
 
-bool mainui_catalog_build_cache(MainUICatalog *catalog, int system, bool replace)
+static bool build_cache(MainUICatalog *catalog, int system, bool replace, bool abandon)
 {
     if (!catalog || system < 0 || system >= catalog->pages[0].count) {
         return false;
@@ -1017,10 +1017,26 @@ bool mainui_catalog_build_cache(MainUICatalog *catalog, int system, bool replace
         return false;
     }
     struct timespec start = mainui_timing_start();
-    bool ok = build_cache_locked(catalog, system, replace);
+    bool ok = build_cache_locked(catalog, system, replace, abandon);
     mainui_timing_finish("cache-build-ms", start);
     mainui_file_unlock(lock);
     return ok;
+}
+
+bool mainui_catalog_build_cache(MainUICatalog *catalog, int system, bool replace)
+{
+    return build_cache(catalog, system, replace, replace);
+}
+
+bool mainui_catalog_repair_cache(MainUICatalog *catalog, int system)
+{
+    return build_cache(catalog, system, true, false);
+}
+
+bool mainui_catalog_deletion_pending(const MainUICatalog *catalog)
+{
+    const MainUICatalogPage *page = &catalog->pages[catalog->depth ? 1 : 0];
+    return catalog->depth && *page->cache_file && mainui_delete_journal_present(page->cache_file);
 }
 
 bool mainui_catalog_remove_cache(MainUICatalog *catalog, int system)

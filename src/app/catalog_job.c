@@ -46,7 +46,7 @@ static int work(void *context)
             ok = job->session.catalog &&
                  mainui_browser_enter(job->session.catalog, &job->session.view, job->rows);
         }
-        else if (ok && job->kind == JOB_REFRESH_SYSTEM) {
+        else if (ok && (job->kind == JOB_REFRESH_SYSTEM || job->kind == JOB_REPAIR_SYSTEM)) {
             MainUICatalog *catalog = job->session.catalog;
             bool in_list = catalog && catalog->depth > 0;
             int system = in_list ? catalog->pages[0].view.selected : job->session.view.selected;
@@ -56,8 +56,10 @@ static int work(void *context)
             while (catalog && catalog->depth) {
                 mainui_catalog_back(catalog);
             }
-            ok = catalog && (in_list ? mainui_catalog_build_cache(catalog, system, true)
-                                     : mainui_catalog_remove_cache(catalog, system));
+            ok = catalog && (!in_list ? mainui_catalog_remove_cache(catalog, system)
+                             : job->kind == JOB_REPAIR_SYSTEM
+                                 ? mainui_catalog_repair_cache(catalog, system)
+                                 : mainui_catalog_build_cache(catalog, system, true));
             if (ok && in_list) {
                 mainui_session_close(&job->session);
                 ok = mainui_session_restore_control(&job->session, job->sd, job->sensitive,
@@ -152,7 +154,7 @@ bool mainui_catalog_job_start(MainUICatalogJob *job, MainUIJobKind kind,
             return false;
         }
     }
-    if (kind == JOB_REFRESH_SYSTEM && source->catalog) {
+    if ((kind == JOB_REFRESH_SYSTEM || kind == JOB_REPAIR_SYSTEM) && source->catalog) {
         job->suspended_catalog = source->catalog;
         for (int i = 1; i <= source->catalog->depth; i++) {
             mainui_cache_suspend(source->catalog->pages[i].cache);

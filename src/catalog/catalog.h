@@ -68,6 +68,11 @@ bool mainui_catalog_apps(MainUICatalog *catalog, const char *sd, bool case_sensi
 /* Create/rebuild one derived ROM cache transactionally from root XML when present,
  * otherwise from a filtered ROM-tree scan. Failed imports retain the old cache. */
 bool mainui_catalog_build_cache(MainUICatalog *catalog, int system, bool replace);
+/* Rebuild a damaged cache without being asked to: as replace, but an
+ * unfinished ROM deletion is only recovered, never abandoned. */
+bool mainui_catalog_repair_cache(MainUICatalog *catalog, int system);
+/* The open console's cache has an unfinished ROM deletion (a journal). */
+bool mainui_catalog_deletion_pending(const MainUICatalog *catalog);
 /* Delete only one system's derived cache; ROMs and source XML are preserved. */
 bool mainui_catalog_remove_cache(MainUICatalog *catalog, int system);
 /* Enter a selected system/folder. Files are deliberately not executable here. */

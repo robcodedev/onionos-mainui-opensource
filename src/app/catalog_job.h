@@ -11,6 +11,7 @@ typedef enum {
     JOB_RELOAD,
     JOB_SEARCH,
     JOB_REFRESH_SYSTEM,
+    JOB_REPAIR_SYSTEM, /* JOB_REFRESH_SYSTEM in a list, never abandoning a deletion */
     JOB_REFRESH_ALL
 } MainUIJobKind;
 

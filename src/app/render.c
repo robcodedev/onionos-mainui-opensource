@@ -442,7 +442,11 @@ static bool recover_page(MainUIApp *ui, const MainUILaunchSource *source)
     if (step == 2 && !mainui_catalog_page_damaged(catalog)) {
         step = 3;
     }
-    if (step == 3 && !mainui_catalog_scan_only(catalog->pages[1].path)) {
+    /* An unfinished ROM deletion is never set aside automatically: the
+     * rebuild only recovers it, and no scan bypasses it. Refresh roms, asked
+     * for, may abandon it. */
+    bool pending = mainui_catalog_deletion_pending(catalog);
+    if (step == 3 && (pending || !mainui_catalog_scan_only(catalog->pages[1].path))) {
         step = 4;
     }
     ui->page_recovery = step;
@@ -451,7 +455,7 @@ static bool recover_page(MainUIApp *ui, const MainUILaunchSource *source)
                 step == 1   ? "reloading"
                 : step == 2 ? "rebuilding the cache"
                             : "scanning the folder");
-        if (mainui_catalog_job_start(&ui->catalog_job, step == 2 ? JOB_REFRESH_SYSTEM : JOB_RELOAD,
+        if (mainui_catalog_job_start(&ui->catalog_job, step == 2 ? JOB_REPAIR_SYSTEM : JOB_RELOAD,
                                      source, ui->sd, ui->config.case_sensitive, ui->config.rows,
                                      NULL, ++ui->catalog_generation)) {
             return false;
@@ -467,8 +471,10 @@ static bool recover_page(MainUIApp *ui, const MainUILaunchSource *source)
     ui->cached_start = -1;
     snprintf(ui->message_title, sizeof ui->message_title, "Catalog unavailable");
     snprintf(ui->message_body, sizeof ui->message_body, "%s",
-             search ? "Cannot read Search results. Run Search again."
-                    : "This list cannot be read.");
+             search    ? "Cannot read Search results. Run Search again."
+             : pending ? "This list cannot be read while a ROM deletion is unfinished. Use "
+                         "Refresh roms to rebuild it."
+                       : "This list cannot be read.");
     return true;
 }
 

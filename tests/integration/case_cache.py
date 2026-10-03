@@ -164,6 +164,22 @@ steps, scanned = recovery_run(sd, 'scanned', 'U', io_env)
 assert steps == ['reloading', 'scanning the folder'], steps
 assert (sd / 'Roms/REC/REC_cache6.db').read_bytes() == cache
 assert recovery_run(plain, 'plain-io', 'U')[1] == scanned
+# An unfinished ROM deletion (here a journal that cannot be read beside a
+# staged ROM, so it cannot be recovered) is never set aside by this automatic
+# recovery: the rebuild only tries to recover it, no scan bypasses it, and the
+# list is left with a message. Refresh roms, asked for, may still abandon it.
+sd = recovery_sd('pending-delete')
+journal = sd / 'Roms/REC/REC_cache6.db.delete.json'
+journal.write_text('{')
+staged = sd / 'Roms/REC/Game 001.nes.mainui-delete'
+staged.write_bytes(b'rom')
+cache = (sd / 'Roms/REC/REC_cache6.db').read_bytes()
+steps, left = recovery_run(sd, 'pending', 'U')
+assert steps == ['reloading', 'rebuilding the cache'], steps
+assert journal.read_text() == '{'
+assert (sd / 'Roms/REC/REC_cache6.db').read_bytes() == cache
+assert left != recovery_run(sd, 'pending-list', '')[1]  # left the list
+assert journal.read_text() == '{' and staged.exists()
 # Back (C cancels the running step) leaves the list; it reopens at its top.
 sd = recovery_sd('cancel')
 steps, cancelled = recovery_run(sd, 'cancelled', 'UC')

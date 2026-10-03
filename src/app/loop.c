@@ -262,7 +262,7 @@ bool mainui_reap_jobs(MainUIApp *ui)
             completed.library = NULL;
             ui->view = completed.view;
         }
-        bool recovering = ui->page_recovery && (kind == JOB_RELOAD || kind == JOB_REFRESH_SYSTEM);
+        bool recovering = ui->page_recovery && (kind == JOB_RELOAD || kind == JOB_REPAIR_SYSTEM);
         if (recovering && result == JOB_CANCELLED) {
             /* Back during recovery leaves the list instead of starting the
              * next step; it reopens at its top. */
