@@ -309,8 +309,9 @@ bool mainui_screen_name_input_key(MainUIApp *ui, const SDL_keysym *key)
         if (mainui_favorite_edit(&ui->favorite_editor, ui->library, ui->sd, ui->name_action,
                                  ui->name_input.text, &ui->view.selected)) {
             mainui_name_input_close(&ui->name_input);
-            mainui_viewport_restore(&ui->view, ui->library->visible_count, ui->config.rows,
-                                    ui->view.selected, ui->view.start, ui->view.end);
+            /* The list grew or reordered under the old window. */
+            mainui_viewport_refit(&ui->view, ui->library->visible_count, ui->config.rows,
+                                  ui->view.selected);
             ui->cached_start = -1;
             ui->selected_at = SDL_GetTicks();
         }
@@ -478,8 +479,10 @@ bool mainui_screen_context_menu_key(MainUIApp *ui, SDLKey key, int *requested_se
         if (ok && ui->library && !ui->search.results) {
             ok = mainui_library_reload(ui->library, ui->sd);
             if (ok) {
-                mainui_viewport_restore(&ui->view, ui->library->visible_count, ui->config.rows,
-                                        ui->view.selected, ui->view.start, ui->view.end);
+                /* One row fewer: the next row takes the selection, and a gap
+                 * left below the last row closes. */
+                mainui_viewport_refit(&ui->view, ui->library->visible_count, ui->config.rows,
+                                      ui->view.selected);
                 ui->cached_start = -1;
             }
         }
@@ -509,8 +512,8 @@ bool mainui_screen_context_menu_key(MainUIApp *ui, SDLKey key, int *requested_se
             /* Keep the visible window and scroll only as far as needed to show
              * the selection, also after Paste: a move within the window must
              * not jump the list. */
-            ui->view.total = ui->library->visible_count;
-            mainui_viewport_move(&ui->view, ui->config.rows, 0, false);
+            mainui_viewport_refit(&ui->view, ui->library->visible_count, ui->config.rows,
+                                  ui->view.selected);
             ui->library->views[ui->library->current + 1] = ui->view;
             ui->cached_start = -1;
             ui->selected_at = SDL_GetTicks();
@@ -817,9 +820,11 @@ bool mainui_screen_list_key(MainUIApp *ui, SDLKey key)
         }
         if (changed) {
             ui->preview_sync_once = true;
-            MainUIViewport saved = ui->library->views[ui->library->current + 1];
-            mainui_viewport_restore(&ui->view, ui->library->visible_count, ui->config.rows,
-                                    saved.selected, saved.start, saved.end);
+            /* The folder's remembered window; an edit since may have changed
+             * its size or moved the row it was left from. */
+            ui->view = ui->library->views[ui->library->current + 1];
+            mainui_viewport_refit(&ui->view, ui->library->visible_count, ui->config.rows,
+                                  ui->view.selected);
             ui->cached_start = -1;
             if (ui->heading) {
                 SDL_FreeSurface(ui->heading);

@@ -84,6 +84,35 @@ void mainui_viewport_move(MainUIViewport *v, int rows, int delta, bool wrap)
     mainui_viewport_restore(v, v->total, rows, (int)next, start, (int)next);
 }
 
+void mainui_viewport_refit(MainUIViewport *v, int total, int rows, int selected)
+{
+    if (rows < 1) {
+        rows = 6;
+    }
+    if (total <= 0) {
+        *v = (MainUIViewport){0, -1, 0, -1};
+        return;
+    }
+    if (selected < 0) {
+        selected = 0;
+    }
+    if (selected >= total) {
+        selected = total - 1;
+    }
+    int64_t start = v->start < 0 ? 0 : v->start;
+    if (selected < start) {
+        start = selected;
+    }
+    if (selected > start + rows - 1) {
+        start = (int64_t)selected - rows + 1;
+    }
+    if (start + rows > total) {
+        start = total > rows ? total - rows : 0;
+    }
+    int64_t last = start + rows - 1;
+    *v = (MainUIViewport){total, selected, (int)start, last >= total ? total - 1 : (int)last};
+}
+
 int mainui_marquee(uint64_t elapsed, int speed, int title, int visible, MainUIBlit out[2])
 {
     if (title <= visible) {

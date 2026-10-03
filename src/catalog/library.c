@@ -478,6 +478,56 @@ const char *mainui_library_title(const MainUILibrary *library)
                                  : "Favorites";
 }
 
+/* The row of folder `child` in its parent's list, and that list's length,
+ * from show_folder() itself so the order always matches what is displayed:
+ * sibling folders sort by their order value, not by their position in the
+ * sidecar. Leaves the parent's list shown; the caller shows the right one. */
+static int row_in_parent(MainUILibrary *library, int child, int *total)
+{
+    library->current = library->folders[child].parent;
+    show_folder(library);
+    *total = library->visible_count;
+    for (int row = 0; row < library->visible_count; row++) {
+        if (library->visible[row] == -child - 1) {
+            return row;
+        }
+    }
+    /* Unreachable: show_folder() lists every folder whose parent is the
+     * current one. Row 0 (".." or the first entry) keeps the window valid
+     * if a later change ever breaks that. */
+    return 0;
+}
+
+/* An edit reloads the whole library; keep the windows remembered for other
+ * folders, matched by folder id (a removed folder's goes). Every folder on
+ * the way down to the current one points at the row that leads on, so Back
+ * returns to the same place even if an edit moved that row. The caller fits
+ * the windows to their lists when it shows them. */
+static void keep_views(MainUILibrary *fresh, const MainUILibrary *old)
+{
+    fresh->views[0] = old->views[0];
+    for (int i = 0; i < old->folder_count; i++) {
+        for (int j = 0; j < fresh->folder_count; j++) {
+            if (!strcmp(old->folders[i].id, fresh->folders[j].id)) {
+                fresh->views[j + 1] = old->views[i + 1];
+                break;
+            }
+        }
+    }
+    int current = fresh->current;
+    for (int child = current, depth = 0; child >= 0 && depth <= MAINUI_FOLDER_LIMIT; depth++) {
+        int parent = fresh->folders[child].parent, total = 0;
+        MainUIViewport *view = &fresh->views[parent + 1];
+        view->selected = row_in_parent(fresh, child, &total);
+        view->total = total;
+        child = parent;
+    }
+    if (current >= 0) {
+        fresh->current = current;
+        show_folder(fresh);
+    }
+}
+
 bool mainui_library_reload(MainUILibrary *library, const char *sd)
 {
     MainUILibrary *fresh = calloc(1, sizeof *fresh);
@@ -499,6 +549,7 @@ bool mainui_library_reload(MainUILibrary *library, const char *sd)
         }
         show_folder(fresh);
     }
+    keep_views(fresh, library);
     mainui_library_close(library);
     *library = *fresh;
     free(fresh);

@@ -227,8 +227,9 @@ static bool delete_locked(MainUICatalog *catalog, MainUIViewport *view, int rows
     MainUIViewport saved = *view;
     bool reopened = mainui_browser_back(catalog, view) && mainui_browser_enter(catalog, view, rows);
     if (reopened) {
-        mainui_viewport_restore(view, mainui_browser_count(catalog), rows, saved.selected,
-                                saved.start, saved.end);
+        /* One ROM fewer: keep the window, close a gap below the last row. */
+        *view = saved;
+        mainui_viewport_refit(view, mainui_browser_count(catalog), rows, saved.selected);
     }
     if (!removed || !reopened) {
         snprintf(catalog->error, sizeof catalog->error, "%s",

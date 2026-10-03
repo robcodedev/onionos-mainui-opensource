@@ -60,6 +60,12 @@ void mainui_viewport_restore(MainUIViewport *view, int total, int rows, int sele
  * Single-step callers may request edge wrapping, while page moves clamp.
  */
 void mainui_viewport_move(MainUIViewport *view, int rows, int delta, bool wrap);
+/* Fit a window to a list that changed underneath it (an edit, a removal, a
+ * reload): select `selected` (clamped), keep the old start where it still
+ * shows the selection, otherwise scroll just far enough, and close any gap
+ * below the last row. The old end is ignored, being stale when the size
+ * changed. Never moves a window that still fits. */
+void mainui_viewport_refit(MainUIViewport *view, int total, int rows, int selected);
 
 typedef struct {
     int source_x, width, destination_x;

@@ -48,6 +48,37 @@ int mainui_suite_core(void)
     v = (MainUIViewport){9, 8, 0, 7};
     mainui_viewport_move(&v, 6, 0, false);
     CHECK(v.selected == 8 && v.start == 3 && v.end == 8);
+    /* A list that changed under a window: grown or shrunk, short or full,
+     * any old window and selection. The selection shows, no gap is left
+     * below the last row, and a window that still fits does not move. */
+    for (int rows = 1; rows <= 8; ++rows) {
+        for (int before = 1; before <= 14; ++before) {
+            for (int start = 0; start < before; ++start) {
+                for (int total = 0; total <= 14; ++total) {
+                    for (int selected = -1; selected <= total; ++selected) {
+                        MainUIViewport w;
+                        mainui_viewport_restore(&w, before, rows, start, start, start + rows - 1);
+                        MainUIViewport old = w;
+                        mainui_viewport_refit(&w, total, rows, selected);
+                        if (!total) {
+                            CHECK(w.total == 0 && w.selected == -1 && w.end == -1);
+                            continue;
+                        }
+                        int want = selected < 0 ? 0 : selected >= total ? total - 1 : selected;
+                        CHECK(w.total == total && w.selected == want);
+                        CHECK(w.start >= 0 && w.start <= w.selected && w.selected <= w.end);
+                        CHECK(w.end ==
+                              (w.start + rows - 1 < total ? w.start + rows - 1 : total - 1));
+                        CHECK(total < rows ? w.start == 0 : w.end - w.start == rows - 1);
+                        if (old.start <= want && want < old.start + rows &&
+                            old.start + rows <= total) {
+                            CHECK(w.start == old.start);
+                        }
+                    }
+                }
+            }
+        }
+    }
     /* Exercise invariants across row counts, empty/small lists and repeated
      * navigation; fixed expected positions alone miss range/overflow failures.
      */
