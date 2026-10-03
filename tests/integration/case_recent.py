@@ -230,4 +230,13 @@ rows = [subprocess.run([str(BUILD / "fixture-recent"), str(sd), "restore", "rece
                        timeout=20, capture_output=True).returncode for i in range(2)]
 assert rows == [0, 2], rows  # the list shows one row
 
+# Preservation must be confirmed: a .damaged that is not a regular file
+# (here a directory) leaves the damaged list unchanged.
+damaged_copy.mkdir()
+broken = (json.dumps(a) + "\n{broken\n").encode("utf-8")
+path.write_bytes(broken)
+add(b, success=False)
+assert path.read_bytes() == broken
+damaged_copy.rmdir()
+path.unlink()
 print("Recent writer scenarios passed")

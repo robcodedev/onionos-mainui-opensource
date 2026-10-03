@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 static const char *string(const cJSON *record, const char *name)
 {
@@ -218,11 +219,14 @@ static bool keep_damaged(const char *path, const char *original)
 {
     char copy[4096 + 16];
     snprintf(copy, sizeof copy, "%s.damaged", path);
-    errno = 0;
-    char *existing = mainui_read_text(copy, 8u * 1024u * 1024u);
-    if (existing || errno != ENOENT) {
-        free(existing);
-        return true; /* an earlier original is already kept */
+    struct stat info;
+    if (!lstat(copy, &info)) {
+        /* An earlier original is kept, readable or not. Anything but a regular
+         * file there (a directory, say) cannot be shown to hold it. */
+        return S_ISREG(info.st_mode);
+    }
+    if (errno != ENOENT) {
+        return false; /* cannot tell: change nothing */
     }
     if (!mainui_write_bytes_new_locked(copy, original, strlen(original))) {
         return false;
