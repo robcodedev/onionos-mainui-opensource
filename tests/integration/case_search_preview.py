@@ -82,4 +82,31 @@ def capture(name, actions):
 # centered cover must be the source console's image, not Search's Imgs.
 assert pixel(capture("first", "ED"), 515, 240) == (255, 0, 0)
 assert pixel(capture("second", "EDD"), 515, 240) == (0, 0, 255)
-print("Search results use their source console's thumbnails")
+
+# A later page of Search results that cannot be read (row 70 of a group of 80
+# has no path) is reloaded once, then left with the Search message. It is
+# never rebuilt or replaced by a scan of Search's data folder (review of
+# 1.0.3), and the database is left as it was.
+many = [("Arcade (80)", "/mnt/SDCARD/Roms/ARCADE", "/mnt/SDCARD/Roms/ARCADE", 1, ".")] + [
+    (f"Game {i:02}", "" if i == 70 else "/mnt/SDCARD/Emu/ARCADE/launch.sh:./first.zip", "", 0,
+     "Arcade (80)") for i in range(80)]
+database.unlink()
+connection = sqlite3.connect(database)
+connection.execute("CREATE TABLE 'data_roms' (id INTEGER PRIMARY KEY AUTOINCREMENT,disp TEXT "
+                   "NOT NULL,path TEXT NOT NULL,imgpath TEXT NOT NULL,type INTEGER DEFAULT 0,"
+                   "ppath TEXT NOT NULL,pinyin TEXT NOT NULL,cpinyin TEXT NOT NULL)")
+connection.executemany("INSERT INTO data_roms (disp,path,imgpath,type,ppath,pinyin,cpinyin) "
+                       "VALUES (?,?,?,?,?,?,'')", [row + (row[0],) for row in many])
+connection.commit()
+connection.close()
+before = database.read_bytes()
+shot = SD / "search-recovery.bmp"
+result = subprocess.run([EXE, "--sd-root", str(SD), "--theme", str(ONION_THEME), "--system",
+                         "Search", "--input", "EU", "--snapshot", str(shot)],
+                        cwd=ROOT, timeout=30, capture_output=True, text=True)
+assert result.returncode == 0, result.stderr[-400:]
+steps = [line.split(": ", 1)[1] for line in result.stderr.splitlines()
+         if line.startswith("Recovering an unreadable list page")]
+assert steps == ["reloading"], steps
+assert database.read_bytes() == before
+print("Search results use their source console's thumbnails; unreadable results stay Search's")

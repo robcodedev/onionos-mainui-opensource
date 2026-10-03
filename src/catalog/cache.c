@@ -29,6 +29,9 @@ struct MainUICache {
     MainUIFileStamp stamp;
     int data_version;
     int remaining_query_budget;
+    /* Why the last window failed: damaged content (a row the reader rejects,
+     * or SQLite corruption), not a busy, I/O, memory or changed-cache error. */
+    bool row_rejected, damaged;
 };
 
 static char *duplicate_text(const char *text)
@@ -266,6 +269,7 @@ static bool decode_row(MainUICache *cache, MainUIEntry *entry)
         sqlite3_column_type(cache->rows, 3) != SQLITE_INTEGER || (type != 0 && type != 1) ||
         !mainui_catalog_path(host_path, cache->sd_root, cache->rom_root, path) ||
         (*artwork && !mainui_catalog_path(image_path, cache->sd_root, cache->rom_root, artwork))) {
+        cache->row_rejected = true;
         return false;
     }
 
@@ -360,6 +364,7 @@ bool mainui_cache_window(MainUICache *cache, int offset, MainUIEntry out[MAINUI_
 {
     memset(out, 0, MAINUI_CACHE_WINDOW * sizeof *out);
     *loaded = 0;
+    cache->row_rejected = cache->damaged = false;
     if (mainui_cache_changed(cache) || offset < 0 || offset > cache->total) {
         return false;
     }
@@ -384,6 +389,7 @@ bool mainui_cache_window(MainUICache *cache, int offset, MainUIEntry out[MAINUI_
                 cache->file, cache->table, offset + count - 1, sqlite3_column_int(cache->rows, 3),
                 sqlite3_column_type(cache->rows, 0), sqlite3_column_type(cache->rows, 1),
                 sqlite3_column_type(cache->rows, 2), sqlite3_column_type(cache->rows, 3));
+            cache->damaged = cache->row_rejected;
             goto fail;
         }
     }
@@ -400,6 +406,7 @@ bool mainui_cache_window(MainUICache *cache, int offset, MainUIEntry out[MAINUI_
         fprintf(stderr, "Cache window failed: %s table=%s result=%d count=%d expected=%d: %s\n",
                 cache->file, cache->table, result, count, expected,
                 sqlite3_errmsg(cache->database));
+        cache->damaged = (result & 0xff) == SQLITE_CORRUPT || (result & 0xff) == SQLITE_NOTADB;
         goto fail;
     }
     *loaded = count;
@@ -411,6 +418,11 @@ fail:
         mainui_entry_close(&out[i]);
     }
     return false;
+}
+
+bool mainui_cache_damaged(const MainUICache *cache)
+{
+    return cache && cache->damaged;
 }
 
 int mainui_cache_folder_count(const MainUICache *cache)

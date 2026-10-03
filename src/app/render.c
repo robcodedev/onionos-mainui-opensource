@@ -422,6 +422,57 @@ static void present(MainUIApp *ui, const SDL_Rect *area)
     }
 }
 
+/* A list page could not be read. Each step runs once, in the background,
+ * keeping the selected row and window: reload the list (it may have changed
+ * outside MainUI); if the cache content itself is damaged, rebuild it as
+ * Refresh roms does; then browse the console by scanning its folder for the
+ * session. Search results get only the reload: nothing else reproduces them. A busy, I/O or memory failure never replaces the cache. Only if
+ * the scan fails too, leave the list with a message: then the folder itself
+ * cannot be read. True when it left. */
+static bool recover_page(MainUIApp *ui, const MainUILaunchSource *source)
+{
+    MainUICatalog *catalog = ui->catalog;
+    int step = ui->page_recovery + 1;
+    /* Search's results come from its own database: after the reload, only
+     * running Search again can repair them. */
+    bool search = mainui_catalog_search_results(catalog);
+    if (search && step > 1) {
+        step = 4;
+    }
+    if (step == 2 && !mainui_catalog_page_damaged(catalog)) {
+        step = 3;
+    }
+    if (step == 3 && !mainui_catalog_scan_only(catalog->pages[1].path)) {
+        step = 4;
+    }
+    ui->page_recovery = step;
+    if (step <= 3) {
+        fprintf(stderr, "Recovering an unreadable list page: %s\n",
+                step == 1   ? "reloading"
+                : step == 2 ? "rebuilding the cache"
+                            : "scanning the folder");
+        ui->reload_search = false;
+        if (mainui_catalog_job_start(&ui->catalog_job, step == 2 ? JOB_REFRESH_SYSTEM : JOB_RELOAD,
+                                     source, ui->sd, ui->config.case_sensitive, ui->config.rows,
+                                     NULL, ++ui->catalog_generation)) {
+            return false;
+        }
+    }
+    ui->page_recovery = 0;
+    /* Remembered at the top, so reopening the list starts on a readable page. */
+    mainui_viewport_restore(&ui->view, ui->view.total, ui->config.rows, 0, 0, ui->config.rows - 1);
+    if (mainui_browser_back(catalog, &ui->view)) {
+        ui->preview_sync_once = true;
+        ui->menu_view.cached_start = -1;
+    }
+    ui->cached_start = -1;
+    snprintf(ui->message_title, sizeof ui->message_title, "Catalog unavailable");
+    snprintf(ui->message_body, sizeof ui->message_body, "%s",
+             search ? "Cannot read Search results. Run Search again."
+                    : "This list cannot be read.");
+    return true;
+}
+
 static bool compose_full_frame(MainUIApp *ui)
 {
     if (ui->catalog_job.thread) {
@@ -463,6 +514,7 @@ static bool compose_full_frame(MainUIApp *ui)
                 }
                 ui->highlighted[i] = NULL;
             }
+            bool page_failed = false;
             for (int i = 0; i < ui->config.rows && ui->view.start + i < ui->view.total; i++) {
                 const char *label = ui->library
                                         ? mainui_library_label(ui->library, ui->view.start + i)
@@ -478,20 +530,11 @@ static bool compose_full_frame(MainUIApp *ui)
                                                      .catalog = ui->catalog,
                                                      .view = &ui->view,
                                                      .home = &ui->home_view};
+                        page_failed = true;
                         /* A job already running (markers, discovery) keeps its
-                         * slot; the reload is retried on a later frame. Any
-                         * other failure shows a message instead of quitting. */
-                        if (!ui->catalog_job.thread) {
-                            ui->reload_search = false;
-                            if (!mainui_catalog_job_start(&ui->catalog_job, JOB_RELOAD, &source,
-                                                          ui->sd, ui->config.case_sensitive,
-                                                          ui->config.rows, NULL,
-                                                          ++ui->catalog_generation)) {
-                                snprintf(ui->message_title, sizeof ui->message_title,
-                                         "Catalog unavailable");
-                                snprintf(ui->message_body, sizeof ui->message_body, "%.200s",
-                                         ui->catalog->error);
-                            }
+                         * slot; recovery continues on a later frame. */
+                        if (!ui->catalog_job.thread && recover_page(ui, &source)) {
+                            return false; /* drawn as the console grid next */
                         }
                         break;
                     }
@@ -524,6 +567,9 @@ static bool compose_full_frame(MainUIApp *ui)
                     ui->highlighted[i] = mainui_search_label(&ui->theme, label, ui->search.query);
                 }
                 free(marked);
+            }
+            if (!page_failed) {
+                ui->page_recovery = 0;
             }
             ui->cached_start = ui->view.start;
         }

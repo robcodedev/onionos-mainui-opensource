@@ -1135,6 +1135,49 @@ static bool search_database(const MainUICatalog *catalog, const char *root)
            !strcmp(path, root);
 }
 
+/* Console roots browsed by scanning for the rest of the session. Changed on
+ * the UI thread only while no catalog worker runs; workers started later read
+ * it. Kept until exit, so it stays reachable. */
+static char **scan_roots;
+static int scan_root_count;
+
+static bool scanned_only(const char *root)
+{
+    for (int i = 0; i < scan_root_count; i++) {
+        if (!strcmp(scan_roots[i], root)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool mainui_catalog_scan_only(const char *root)
+{
+    if (scanned_only(root)) {
+        return true;
+    }
+    char **grown = realloc(scan_roots, (size_t)(scan_root_count + 1) * sizeof *grown);
+    if (!grown) {
+        return false;
+    }
+    scan_roots = grown;
+    if (!(scan_roots[scan_root_count] = strdup(root))) {
+        return false;
+    }
+    scan_root_count++;
+    return true;
+}
+
+bool mainui_catalog_search_results(const MainUICatalog *catalog)
+{
+    return catalog->depth > 0 && search_database(catalog, catalog->pages[1].path);
+}
+
+bool mainui_catalog_page_damaged(const MainUICatalog *catalog)
+{
+    return mainui_cache_damaged(catalog->pages[catalog->depth].cache);
+}
+
 bool mainui_catalog_enter(MainUICatalog *catalog, int index)
 {
     catalog->error[0] = 0;
@@ -1190,7 +1233,13 @@ bool mainui_catalog_enter(MainUICatalog *catalog, int index)
             pending_delete = mainui_delete_journal_present(next->cache_file);
         }
     }
-    if (!pending_delete && !catalog->depth && !path_exists(next->cache_file) &&
+    /* Its cache could not be read even after a rebuild: scan the folder. A
+     * scanned page's children are scanned too, so this covers the console. */
+    bool forced_scan = !catalog->depth && scanned_only(next->path);
+    if (forced_scan) {
+        next->cache_fallback = true;
+    }
+    if (!forced_scan && !pending_delete && !catalog->depth && !path_exists(next->cache_file) &&
         !search_database(catalog, next->path)) {
         if (!mainui_catalog_build_cache(catalog, index, false)) {
             char xml[4096];
@@ -1213,7 +1262,7 @@ bool mainui_catalog_enter(MainUICatalog *catalog, int index)
     }
     const char *root = catalog->depth ? catalog->pages[1].path : next->path;
     /* A scanned child has no verified database key; retain scan semantics. */
-    if ((!catalog->depth || e->cache_key) && path_exists(next->cache_file)) {
+    if (!forced_scan && (!catalog->depth || e->cache_key) && path_exists(next->cache_file)) {
         bool rebuilt = false;
     retry_cache:
         if (mainui_cache_open(&next->cache, next->cache_file, next->cache_table,

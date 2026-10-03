@@ -256,7 +256,23 @@ bool mainui_reap_jobs(MainUIApp *ui)
             completed.library = NULL;
             ui->view = completed.view;
         }
-        if (result == JOB_FAILED) {
+        bool recovering = ui->page_recovery && (kind == JOB_RELOAD || kind == JOB_REFRESH_SYSTEM);
+        if (recovering && result == JOB_CANCELLED) {
+            /* Back during recovery leaves the list instead of starting the
+             * next step; it reopens at its top. */
+            ui->page_recovery = 0;
+            if (ui->catalog && !ui->library) {
+                mainui_viewport_restore(&ui->view, ui->view.total, ui->config.rows, 0, 0,
+                                        ui->config.rows - 1);
+                mainui_browser_back(ui->catalog, &ui->view);
+            }
+        }
+        if (result == JOB_FAILED && recovering) {
+            /* The next recovery step follows when the page is drawn again. */
+            fprintf(stderr, "%s\n", ui->message_body);
+            ui->message_body[0] = 0;
+        }
+        else if (result == JOB_FAILED) {
             if (kind == JOB_SEARCH && ui->name_input.open) {
                 snprintf(ui->name_input.error, sizeof ui->name_input.error, "%.159s",
                          ui->message_body);

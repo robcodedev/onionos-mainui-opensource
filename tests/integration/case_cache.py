@@ -4,9 +4,11 @@ import os
 """Generate cache fixtures in build/ and verify compiled C plus actual SDL paging.
 All ROMs are empty filename fixtures. Valid/unsupported caches remain byte-identical.
 """
+from contextlib import closing
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 from env import unlink_if_exists, BUILD, ONION_THEME, require_onion_theme  # noqa: E402
@@ -101,4 +103,71 @@ assert capture('folder-return','EB') == first
 assert capture('last','U') != first
 assert capture('last-return','UD') == first
 assert capture('window-boundary','D'*65) != first
-print('Cache checks passed: 10 C scenarios, 13002-row paging, 5 SDL captures, unchanged input databases')
+# A cache page that cannot be read is recovered in the background, keeping the
+# selected row and window: reload, then rebuild the cache, then scan the folder.
+# Each SD holds 80 real ROMs whose cache MainUI built; row 69 is then damaged.
+RECOVERY = BASE / 'recovery'
+def recovery_sd(name, cache=True, xml=None):
+    sd = RECOVERY / name
+    for directory in ('Emu/REC', 'Roms/REC'):
+        (sd / directory).mkdir(parents=True)
+    (sd / 'Emu/REC/config.json').write_text(json.dumps(dict(
+        label='Recovery', rompath='../../Roms/REC', launch='launch.sh', extlist='nes')))
+    for i in range(80):
+        (sd / f'Roms/REC/Game {i:03}.nes').write_bytes(b'rom')
+    if cache:
+        recovery_run(sd, 'build', '')
+        with closing(sqlite3.connect(sd / 'Roms/REC/REC_cache6.db')) as conn, conn:
+            conn.execute("UPDATE REC_roms SET path='' WHERE disp='Game 069'")
+    if xml is not None:
+        (sd / 'Roms/REC/miyoogamelist.xml').write_text(xml)
+    return sd
+def recovery_run(sd, name, actions, env=None):
+    unlink_if_exists(sd / 'appconfigs/romwinidx.json')
+    out = RECOVERY / f'{sd.name}-{name}.bmp'
+    command = [str(ui), '--sd-root', str(sd), '--theme', str(theme), '--system', 'Recovery',
+               '--snapshot', str(out)] + (['--input', actions] if actions else [])
+    result = subprocess.run(command, cwd=ROOT, timeout=30, capture_output=True, text=True,
+                            env=env)
+    assert result.returncode == 0, (name, result.returncode, result.stderr[-400:])
+    assert 'cannot be read' not in result.stderr
+    steps = [line.split(': ', 1)[1] for line in result.stderr.splitlines()
+             if line.startswith('Recovering an unreadable list page')]
+    return steps, out.read_bytes()
+shutil.rmtree(RECOVERY, ignore_errors=True)
+# The rebuilt cache reads: same row and window as the clean list, no message.
+sd = recovery_sd('rebuild')
+steps, recovered = recovery_run(sd, 'recovered', 'U')
+assert steps == ['reloading', 'rebuilding the cache'], steps
+assert recovery_run(sd, 'clean', 'U') == ([], recovered)
+# The rebuild fails (a malformed gamelist): the folder is scanned for the
+# session, still at the same row, and the damaged cache is left as it was.
+sd = recovery_sd('scan', xml='<gameList><game><path>broken')
+cache = (sd / 'Roms/REC/REC_cache6.db').read_bytes()
+steps, scanned = recovery_run(sd, 'scanned', 'U')
+assert steps == ['reloading', 'rebuilding the cache', 'scanning the folder'], steps
+assert (sd / 'Roms/REC/REC_cache6.db').read_bytes() == cache
+plain = recovery_sd('plain', cache=False)
+assert recovery_run(plain, 'plain', 'U')[1] == scanned
+# A failure that is not damaged content (here SQLITE_IOERR for every later
+# page) never replaces the cache: reload, then scan, at the same row.
+sd = recovery_sd('io-error', cache=True)
+with closing(sqlite3.connect(sd / 'Roms/REC/REC_cache6.db')) as conn, conn:
+    conn.execute("UPDATE REC_roms SET path='./Game 069.nes' WHERE disp='Game 069'")
+cache = (sd / 'Roms/REC/REC_cache6.db').read_bytes()
+libraries = subprocess.run(['ldd', str(ui)], check=True, capture_output=True, text=True)
+asan = next((line.split('=>', 1)[1].split()[0] for line in libraries.stdout.splitlines()
+             if 'libasan.so' in line), '')
+io_env = dict(os.environ, LD_PRELOAD=' '.join(filter(
+    None, (asan, os.environ.get('LD_PRELOAD'), str(BUILD / 'sqlite-ioerr.so')))))
+steps, scanned = recovery_run(sd, 'scanned', 'U', io_env)
+assert steps == ['reloading', 'scanning the folder'], steps
+assert (sd / 'Roms/REC/REC_cache6.db').read_bytes() == cache
+assert recovery_run(plain, 'plain-io', 'U')[1] == scanned
+# Back (C cancels the running step) leaves the list; it reopens at its top.
+sd = recovery_sd('cancel')
+steps, cancelled = recovery_run(sd, 'cancelled', 'UC')
+assert steps == ['reloading'], steps
+assert recovery_run(sd, 'grid', 'B')[1] == cancelled
+assert recovery_run(sd, 'reopened', 'UCE')[1] == recovery_run(sd, 'top', '')[1]
+print('Cache checks passed: 10 C scenarios, 13002-row paging, 5 SDL captures, page recovery, unchanged input databases')

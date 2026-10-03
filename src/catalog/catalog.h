@@ -76,6 +76,17 @@ bool mainui_catalog_build_cache(MainUICatalog *catalog, int system, bool replace
 bool mainui_catalog_remove_cache(MainUICatalog *catalog, int system);
 /* Enter a selected system/folder. Files are deliberately not executable here. */
 bool mainui_catalog_enter(MainUICatalog *catalog, int index);
+/* Browse the console whose ROM root is `root` by scanning its folder instead
+ * of its cache, for the rest of the session: the last step of recovering a
+ * cache page that cannot be read. Call it on the UI thread while no catalog
+ * worker runs; workers started later see it. False only when out of memory. */
+bool mainui_catalog_scan_only(const char *root);
+/* After the current page failed to load: true only if its cache content is
+ * damaged (see mainui_cache_damaged()), which a rebuild can repair. */
+bool mainui_catalog_page_damaged(const MainUICatalog *catalog);
+/* The list shows Search's results: a virtual database that neither a rebuild
+ * nor a folder scan can reproduce. */
+bool mainui_catalog_search_results(const MainUICatalog *catalog);
 /* Borrow one row by absolute index. A later accessor may replace the current
  * 64-row cache window; never retain its pointer across accessor/navigation calls.
  * NULL reports an invalid index; cache read failures also set catalog->error.

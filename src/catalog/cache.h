@@ -18,6 +18,10 @@ bool mainui_cache_open(MainUICache **out, const char *file, const char *table, c
  * Offset refers to the full ordered list. At most 64 rows are materialized. */
 bool mainui_cache_window(MainUICache *cache, int offset, MainUIEntry out[MAINUI_CACHE_WINDOW],
                          int *loaded);
+/* After a failed window: true only for damaged content (a row the reader
+ * rejects, or SQLite corruption). Busy, I/O, memory, interrupted or changed-
+ * cache failures are false: replacing the cache would not be justified. */
+bool mainui_cache_damaged(const MainUICache *cache);
 /* Finalize queries and close the connection; NULL is allowed. */
 void mainui_cache_close(MainUICache *cache);
 /* Temporarily release file handles while retaining query identity and row counts.
