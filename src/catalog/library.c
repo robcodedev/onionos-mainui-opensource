@@ -111,25 +111,44 @@ MainUIRecentIdentity mainui_recent_identity(const cJSON *record)
     return (MainUIRecentIdentity){launch, rom, strlen(launch)};
 }
 
+/* A Recent's key: its effective launcher and ROM, both through mainui_rom_key,
+ * so a console list's stock spelling and Search's spelling of one launch are
+ * one Recent. The launcher stays part of it: one ROM under two emulators is
+ * two Recents. Owned by the caller; NULL if out of memory or too long. */
+static char *recent_key(const cJSON *record)
+{
+    MainUIRecentIdentity effective = mainui_recent_identity(record);
+    char launch[MAINUI_PATH_MAX], launch_key[MAINUI_PATH_MAX], rom_key[MAINUI_PATH_MAX];
+    if (effective.launch_length >= sizeof launch) {
+        return NULL;
+    }
+    memcpy(launch, effective.launch, effective.launch_length);
+    launch[effective.launch_length] = 0;
+    if (!mainui_rom_key(launch_key, launch) || !mainui_rom_key(rom_key, effective.rom)) {
+        return NULL;
+    }
+    size_t size = strlen(launch_key) + strlen(rom_key) + 2;
+    char *key = malloc(size);
+    if (key) {
+        snprintf(key, size, "%s\n%s", launch_key, rom_key);
+    }
+    return key;
+}
+
 bool mainui_recent_same(const cJSON *a, const cJSON *b)
 {
-    MainUIRecentIdentity left = mainui_recent_identity(a), right = mainui_recent_identity(b);
-    return left.launch_length == right.launch_length &&
-           !memcmp(left.launch, right.launch, left.launch_length) && !strcmp(left.rom, right.rom);
+    char *left = recent_key(a), *right = recent_key(b);
+    bool same = left && right && !strcmp(left, right);
+    free(left);
+    free(right);
+    return same;
 }
 
 /* An entry's identity; see mainui_library_find(). Owned by the caller. */
 static char *record_key(const MainUILibrary *library, const cJSON *json)
 {
     if (library->recent) {
-        MainUIRecentIdentity effective = mainui_recent_identity(json);
-        size_t size = effective.launch_length + strlen(effective.rom) + 2;
-        char *key = malloc(size);
-        if (key) {
-            snprintf(key, size, "%.*s\n%s", (int)effective.launch_length, effective.launch,
-                     effective.rom);
-        }
-        return key;
+        return recent_key(json); /* the reader dedupes as the writer does */
     }
     const char *rom = string(json, "rompath"), *launch = string(json, "launch");
     const char *label = string(json, "label");

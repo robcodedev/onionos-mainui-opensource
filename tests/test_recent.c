@@ -14,6 +14,9 @@ static int restore(const char *sd, bool recent, int index)
     MainUILibrary *library = calloc(1, sizeof *library);
     if (!library || !mainui_library_open(library, sd, recent) || index < 0 ||
         index >= library->visible_count) {
+        if (library) {
+            mainui_library_close(library);
+        }
         free(library);
         return 2;
     }

@@ -211,4 +211,23 @@ assert fixture_out("add-favorite", json.dumps(dict(stock, rompath="/mnt/SDCARD/R
 assert favourites.read_bytes() == before
 assert fixture_out("is-favorite", "/mnt/SDCARD/Roms/FC/other.nes").stdout.strip() == "no"
 favourites.unlink()
+
+# One launch, two routes: the console list records the stock spelling, Search
+# its normalized ROM after the launcher. That is one Recent, in the writer
+# and in the reader; another emulator still makes it a second Recent.
+console = dict(label="Spelled", rompath="/mnt/SDCARD/Emu/FC/../../Roms/FC/spelled.nes",
+               launch="/mnt/SDCARD/Emu/FC/launch.sh", type=5)
+searched = dict(label="Spelled", launch="/mnt/SDCARD/App/Search/launch.sh", type=5,
+                rompath="/mnt/SDCARD/Emu/FC/launch.sh:/mnt/SDCARD/Roms/FC/spelled.nes")
+write([console])
+add(searched)
+assert read() == [searched]
+other_emulator = dict(console, launch="/mnt/SDCARD/Emu/FC2/launch.sh")
+add(other_emulator)
+assert read() == [other_emulator, searched]
+write([searched, console])  # both spellings already in the file
+rows = [subprocess.run([str(BUILD / "fixture-recent"), str(sd), "restore", "recents", str(i)],
+                       timeout=20, capture_output=True).returncode for i in range(2)]
+assert rows == [0, 2], rows  # the list shows one row
+
 print("Recent writer scenarios passed")
