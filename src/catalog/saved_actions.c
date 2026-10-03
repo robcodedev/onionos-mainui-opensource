@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "catalog/saved_actions.h"
 #include "catalog/catalog.h"
+#include "catalog/library.h"
 #include "platform/files.h"
 #include <errno.h>
 #include <stdio.h>
@@ -20,6 +21,9 @@ static const char *real_rom(const cJSON *record)
     return separator ? separator + strlen("launch.sh:") : rom;
 }
 
+/* Favorites keep matching by ROM path alone. Recents use mainui_recent_same():
+ * the reader lists one ROM under two launchers as two rows, so the launcher is
+ * part of a Recent's identity. */
 static bool same(const cJSON *a, const cJSON *b)
 {
     const char *rom = real_rom(a), *other = real_rom(b);
@@ -93,7 +97,8 @@ static bool saved_action_unlocked(const char *sd, bool recent, MainUISavedAction
             !strcmp(string(item, "label"), string(record, "label"))) {
             found = true; /* Patched duplicate-label guard covers Apps as well as ROMs. */
         }
-        if (item && action == SAVED_REMOVE && !found && same(item, record)) {
+        if (item && action == SAVED_REMOVE && !found &&
+            (recent ? mainui_recent_same(item, record) : same(item, record))) {
             keep = false;
             found = true;
         }
@@ -200,7 +205,7 @@ static bool recent_unlocked(const char *sd, const cJSON *record)
             }
             bool keep = recent_game(item);
             for (int i = 0; keep && i < count; i++) {
-                if (same(items[i], item)) {
+                if (mainui_recent_same(items[i], item)) {
                     keep = false;
                 }
             }

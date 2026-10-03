@@ -53,6 +53,26 @@ static char *identity(const char *launch, const char *rom)
     return key;
 }
 
+MainUIRecentIdentity mainui_recent_identity(const cJSON *record)
+{
+    const char *rom = string(record, "rompath"), *launch = string(record, "launch");
+    /* Normalize only Search's known encoding; a drive-letter colon is not a
+     * Search separator. */
+    const char *separator = strstr(rom, "launch.sh:");
+    if (separator) {
+        size_t length = (size_t)(separator - rom) + strlen("launch.sh");
+        return (MainUIRecentIdentity){rom, rom + length + 1, length};
+    }
+    return (MainUIRecentIdentity){launch, rom, strlen(launch)};
+}
+
+bool mainui_recent_same(const cJSON *a, const cJSON *b)
+{
+    MainUIRecentIdentity left = mainui_recent_identity(a), right = mainui_recent_identity(b);
+    return left.launch_length == right.launch_length &&
+           !memcmp(left.launch, right.launch, left.launch_length) && !strcmp(left.rom, right.rom);
+}
+
 static bool add_record(MainUILibrary *library, cJSON *json)
 {
     const char *label = string(json, "label");
@@ -62,20 +82,20 @@ static bool add_record(MainUILibrary *library, cJSON *json)
         cJSON_Delete(json);
         return true;
     }
-    /* Search encodes the source launcher before the real ROM. Normalize only
-     * that known encoding; a drive-letter colon is not a Search separator. */
-    const char *separator = strstr(rom, "launch.sh:");
-    if (library->recent && separator) {
-        size_t length = (size_t)(separator - rom) + strlen("launch.sh");
+    /* Search encodes the source launcher before the real ROM; store the
+     * effective launcher and ROM, the identity removal also uses. */
+    MainUIRecentIdentity effective = mainui_recent_identity(json);
+    if (library->recent && effective.rom != rom) {
+        size_t length = effective.launch_length;
         char *source = malloc(length + 1);
         if (!source) {
             cJSON_Delete(json);
             return false;
         }
-        memcpy(source, rom, length);
+        memcpy(source, effective.launch, length);
         source[length] = 0;
         cJSON *new_launch = cJSON_CreateString(source);
-        cJSON *new_rom = cJSON_CreateString(rom + length + 1);
+        cJSON *new_rom = cJSON_CreateString(effective.rom);
         free(source);
         if (!new_launch || !new_rom) {
             cJSON_Delete(new_launch);

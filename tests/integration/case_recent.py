@@ -62,4 +62,40 @@ path.write_text('{"broken":\n', encoding="utf-8")
 before = path.read_bytes()
 add(game(83), success=False)
 assert path.read_bytes() == before
+
+# One ROM under two emulators is two Recents. Removing or relaunching one
+# keeps the other (review of 1.0.2, finding 1).
+def variant(name, label):
+    return dict(label=label, rompath="/mnt/SDCARD/Roms/PS/game.pbp",
+                launch=f"/mnt/SDCARD/Emu/{name}/launch.sh", type=5)
+
+def remove(index, success=True):
+    result = subprocess.run([str(BUILD / "fixture-recent"), str(sd), "remove", str(index)],
+                            check=False, timeout=20)
+    assert result.returncode == (0 if success else 1)
+
+a, b = variant("PS-A", "Game A"), variant("PS-B", "Game B")
+first = json.dumps(a) + "\n"
+path.write_text(first + json.dumps(b) + "\n", encoding="utf-8")
+remove(1)
+assert path.read_text(encoding="utf-8") == first
+path.write_text(first + json.dumps(b) + "\n", encoding="utf-8")
+remove(0)
+assert read() == [b]
+write([a, b])
+add(b)
+assert read() == [b, a]
+add(a)
+assert read() == [a, b]
+# Search's prefix names the same launcher, so it still replaces that variant only.
+searched = dict(a, label="Searched", launch="/mnt/SDCARD/App/Search/launch.sh",
+                rompath=a["launch"] + ":" + a["rompath"])
+add(searched)
+assert read() == [searched, b]
+write([searched, b])
+remove(0)
+assert read() == [b]
+write([b, searched])
+remove(1)
+assert read() == [b]
 print("Recent writer scenarios passed")

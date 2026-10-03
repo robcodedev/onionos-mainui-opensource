@@ -39,6 +39,19 @@ typedef struct {
 /* Startup compatibility: restore Onion's hidden Recent file only when the
  * normal path is absent. Never merge files or replace an existing destination. */
 bool mainui_library_restore_recent(const char *sd);
+
+/* Effective Recent identity: Search writes its source launcher before the
+ * ROM ("<...>/launch.sh:<rom>"), which counts as that launcher and ROM.
+ * Otherwise launch and rompath as written. Borrowed pointers into record;
+ * launch is not NUL-terminated at launch_length. */
+typedef struct {
+    const char *launch, *rom;
+    size_t launch_length;
+} MainUIRecentIdentity;
+
+MainUIRecentIdentity mainui_recent_identity(const cJSON *record);
+/* Same effective launcher and ROM, as Recents shows and removes them. */
+bool mainui_recent_same(const cJSON *a, const cJSON *b);
 /* Initialize a zeroed model; close it even when loading reports failure. */
 bool mainui_library_changed(const MainUILibrary *, const char *sd);
 bool mainui_library_open_control(MainUILibrary *, const char *sd, bool recent, MainUICancel);
