@@ -57,6 +57,9 @@ assert home == capture('settings-home','RREBLL')
 assert before == {p:p.read_bytes() for p in CONFIG.iterdir() if p.is_file()}
 (CONFIG/'main-menu.json').write_text('{"menu":{"games":true,"apps":true,"settings":true},"settings":["display","brightness","about"]}')
 subprocess.run([str(BUILD / "fixture-stock_settings"),str(CONFIG),str(SD)],cwd=ROOT,check=True,timeout=20)
+SOUNDS = OUT/'sounds-sd'
+SOUNDS.mkdir(exist_ok=True)
+subprocess.run([str(BUILD / "fixture-stock_settings"),str(CONFIG),str(SOUNDS),'sounds'],cwd=ROOT,check=True,timeout=20)
 assert settings != capture('settings-whitelist','RRE')
 print('Desktop checks passed: mapped buttons, Apps list, stock Settings navigation/whitelist, no invented settings writes')
 

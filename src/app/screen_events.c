@@ -130,6 +130,11 @@ bool mainui_screen_settings_open(MainUIApp *ui, SDLKey key)
         if (ui->settings.rows[ui->settings.selected] == SET_SOUND) {
             mainui_audio_volume(ui->settings.values[SET_SOUND]);
         }
+        /* Stock clicks on every press of these rows, also at a limit where the
+         * value stays. After the volume change, so Menu sound plays at the new
+         * level and is silent at 0. The selection does not move, so the
+         * selection-change sound in mainui_prepare_frame() stays quiet (#10). */
+        mainui_audio_change();
     }
     else if (key == SDLK_RETURN && ui->settings.count &&
              ui->settings.rows[ui->settings.selected] == SET_LANGUAGE) {

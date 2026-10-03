@@ -26,6 +26,10 @@ static struct {
     void (*free_wave)(void *);
 } audio;
 
+/* Kept apart from `audio`, which close clears. UI thread only. */
+static unsigned change_requests;
+static int requested_volume = -1, change_volume = -1;
+
 static bool resolve(const char *name, void *function, size_t size)
 {
     void *address = SDL_LoadFunction(audio.module, name);
@@ -74,14 +78,15 @@ void mainui_audio_close(void)
 
 void mainui_audio_volume(int volume)
 {
-    if (!audio.opened) {
-        return;
-    }
     if (volume < 0) {
         volume = 0;
     }
     if (volume > 20) {
         volume = 20;
+    }
+    requested_volume = volume;
+    if (!audio.opened) {
+        return;
     }
     int mixer_volume = volume * 128 / 20;
     audio.volume_music(mixer_volume);
@@ -153,6 +158,8 @@ bool mainui_audio_open(const char *theme, const char *fallback, int volume)
 
 void mainui_audio_change(void)
 {
+    change_requests++;
+    change_volume = requested_volume;
     if (audio.opened && !audio.paused && audio.change) {
         audio.play_channel(-1, audio.change, 0, -1);
     }
@@ -177,4 +184,12 @@ void mainui_audio_pause(bool paused)
         audio.resume_music();
         audio.resume_channels(-1);
     }
+}
+
+unsigned mainui_audio_change_requests(int *volume)
+{
+    if (volume) {
+        *volume = change_volume;
+    }
+    return change_requests;
 }
