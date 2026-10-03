@@ -31,14 +31,19 @@ static bool location(const MainUICatalog *catalog, char out[4096], bool create)
 }
 
 /* repair (save path, under the file lock): a file that was read completely but
- * is not a valid position list is moved aside to <file>.bad and replaced, so
- * one damaged file does not stop positions being saved forever. A file that
- * cannot be read at all (I/O error) is still never replaced. */
+ * is not a valid position list (also one with NUL bytes, or too large) is
+ * moved aside to <file>.bad and replaced, so one damaged file does not stop
+ * positions being saved forever. A file that cannot be read at all (I/O
+ * error) is still never replaced. */
 static cJSON *read_positions(const char *file, bool repair)
 {
     char *text = mainui_read_text(file, 4 * 1024 * 1024);
+    int read_error = text ? 0 : errno;
     cJSON *root = text ? cJSON_ParseWithOpts(text, NULL, true) : NULL;
-    bool readable = text != NULL;
+    /* Read in full but not usable text (NUL bytes, EINVAL) or too large to be
+     * a position list (EFBIG): damaged content, repaired like invalid JSON.
+     * The rename keeps every byte without reading them. */
+    bool readable = text != NULL || read_error == EINVAL || read_error == EFBIG;
     free(text);
     if (repair && readable &&
         (!cJSON_IsObject(root) || !cJSON_IsArray(cJSON_GetObjectItemCaseSensitive(root, "list")))) {

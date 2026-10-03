@@ -76,4 +76,17 @@ assert "launching anyway" not in stderr, stderr
 assert (SD / "appconfigs/romwinidx.json.bad").read_text() == "{broken"
 saved = json.loads((SD / "appconfigs/romwinidx.json").read_text())
 assert isinstance(saved.get("list"), list) and saved["list"], saved
+
+# The same for content that cannot even be read as text: NUL bytes at the
+# start, middle or end, or a file of zeros (review of 1.0.3, finding 5).
+valid = b'{"list":[]}'
+for name, damaged in (("nul-start", b"\x00" + valid), ("nul-middle", valid[:5] + b"\x00" + valid[5:]),
+                      ("nul-end", valid + b"\x00"), ("zeros", b"\x00" * 512)):
+    (SD / "appconfigs/romwinidx.json.bad").unlink(missing_ok=True)
+    (SD / "appconfigs/romwinidx.json").write_bytes(damaged)
+    command, stderr = launch(name)
+    assert "Two.nes" in command and "launching anyway" not in stderr, (name, stderr)
+    assert (SD / "appconfigs/romwinidx.json.bad").read_bytes() == damaged, name
+    saved = json.loads((SD / "appconfigs/romwinidx.json").read_text())
+    assert isinstance(saved.get("list"), list) and saved["list"], (name, saved)
 print("launch_position: ok")
