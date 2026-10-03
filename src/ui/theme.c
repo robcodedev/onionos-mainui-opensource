@@ -503,6 +503,13 @@ static int json_int(const cJSON *obj, const char *name, int fallback)
     return cJSON_IsNumber(item) ? item->valueint : fallback;
 }
 
+/* An explicit size of 0. Other invalid sizes still fall back to a default. */
+static bool zero_size(const cJSON *obj, const char *name)
+{
+    const cJSON *item = cJSON_GetObjectItemCaseSensitive(obj, name);
+    return cJSON_IsNumber(item) && item->valuedouble == 0;
+}
+
 static const char *json_string(const cJSON *obj, const char *name)
 {
     const cJSON *item = cJSON_GetObjectItemCaseSensitive(obj, name);
@@ -616,6 +623,13 @@ bool mainui_theme_open_sd(MainUITheme *t, const char *dir, const char *base, con
     if (cJSON_IsBool(cJSON_GetObjectItemCaseSensitive(hide, "hints"))) {
         t->hide_hints = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(hide, "hints"));
     }
+    /* Stock parity: themes hide footer hints, home and console labels or the
+     * title with size 0, where stock renders nothing. Only an explicit 0 in
+     * that object counts; a hint size inherited from the title does not. */
+    t->hide_title_text = zero_size(title, "size");
+    t->hide_hint_text = zero_size(hint, "size");
+    t->hide_grid_text = zero_size(grid, "grid1x4");
+    t->hide_expert_text = zero_size(grid, "grid3x4");
     int grid_size = json_int(grid, "grid1x4", 24), hint_size = json_int(hint, "size", title_size);
     if (grid_size < 1 || grid_size > 120) {
         grid_size = 24;

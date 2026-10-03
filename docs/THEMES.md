@@ -20,6 +20,7 @@ A theme can set both game-list options in its top-level `config.json`:
 - **Game-list icon left margin:** `gamelist.iconLeftMargin` places the folder and game icons, and with them the start of the title, at an absolute distance from the left edge. It applies at every row count, including the stock six rows. `0` is valid and lets artwork start at the list edge; values above 300 are treated as 300. A missing, negative or invalid value keeps the normal layout, which depends on the row count. One value controls both folder and game rows.
 - **Game-list font weight:** `gamelist.bold` set to `false` draws ROM, Favorites, Recents and Search result rows in the normal (not bold) style. Missing, invalid or `true` keeps the stock bold style. Other text (Settings, Apps, titles, game details, the keyboard) is not affected.
 - **Hidden labels:** `hideLabels.icons` and `hideLabels.hints` hide the main-menu icon labels and the footer hint text, as in Onion. The older `hideIconTitle` still hides both.
+- **Font size 0:** as in stock, a size of 0 hides that text: `hint.size` the footer hints and page counter, `grid.grid1x4` the main-menu labels and the Games console labels, `grid.grid3x4` the Expert console labels, and `title.size` the screen title. Dialogs, messages and details that share these fonts stay readable at the default size. Only an explicit 0 counts: a missing `hint.size` follows `title.size` but stays visible.
 
 ## Optional assets
 

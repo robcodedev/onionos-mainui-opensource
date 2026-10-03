@@ -136,7 +136,7 @@ void mainui_menu_draw_home(MainUIMenuView *view, SDL_Surface *screen, const Main
         if (icon) {
             blit(screen, icon, x + (width - icon->w) / 2, 60 + (360 - icon->h) / 2 - 10);
         }
-        if (!theme->hide_icons) {
+        if (!theme->hide_icons && !theme->hide_grid_text) {
             home_label(theme, screen, mainui_menu_label(menu->sections[i]),
                        theme->grid_color[selected], x, width);
         }
@@ -178,9 +178,13 @@ void mainui_menu_draw_systems(MainUIMenuView *view, SDL_Surface *screen, MainUIC
                     view->console_icons[i][selected] =
                         mainui_theme_console_icon(theme, entry->icon);
                 }
-                view->console_labels[i][selected] = TTF_RenderUTF8_Blended(
-                    expert && theme->expert_font ? theme->expert_font : theme->grid_font,
-                    entry->label, theme->grid_color[selected]);
+                bool expert_font = expert && theme->expert_font;
+                bool hidden = expert_font ? theme->hide_expert_text : theme->hide_grid_text;
+                view->console_labels[i][selected] =
+                    hidden ? NULL
+                           : TTF_RenderUTF8_Blended(expert_font ? theme->expert_font
+                                                                : theme->grid_font,
+                                                    entry->label, theme->grid_color[selected]);
             }
         }
         view->cached_start = position->start;

@@ -23,7 +23,7 @@ static void footer(SDL_Surface *screen, MainUITheme *theme, int page, int total,
             mainui_blit(screen, button, x, 450 - button->h / 2);
             x += button->w + 5;
         }
-        {
+        if (!theme->hide_hint_text) {
             SDL_Surface *hint =
                 mainui_theme_text(theme, theme->hint_font, hints[i], theme->hint_color);
             if (hint) {
@@ -33,7 +33,7 @@ static void footer(SDL_Surface *screen, MainUITheme *theme, int page, int total,
         }
         x += 30;
     }
-    if (total >= 0) {
+    if (total >= 0 && !theme->hide_hint_text) {
         char text[48];
         snprintf(text, sizeof text, "%d", total);
         SDL_Surface *last = mainui_theme_text(theme, theme->hint_font, text, theme->total_color);
@@ -143,7 +143,9 @@ static void draw_header_image(SDL_Surface *screen, MainUITheme *theme, SDL_Surfa
     clip.w = 640 - 2 * margin;
     SDL_SetClipRect(screen, &clip);
     if (title) {
-        mainui_blit(screen, title, margin + (clip.w - title->w) / 2, (60 - title->h) / 2);
+        if (!theme->hide_title_text) {
+            mainui_blit(screen, title, margin + (clip.w - title->w) / 2, (60 - title->h) / 2);
+        }
     }
     else if (theme->logo) {
         mainui_blit(screen, theme->logo, 20, (60 - theme->logo->h) / 2);
@@ -190,6 +192,9 @@ void mainui_draw_empty(SDL_Surface *screen, MainUITheme *theme)
 void mainui_draw_folder_footer(SDL_Surface *screen, MainUITheme *theme, int count)
 {
     mainui_draw_footer(screen, theme, 0, -1);
+    if (theme->hide_hint_text) {
+        return;
+    }
     char value[32];
     snprintf(value, sizeof value, "(%d)", count);
     SDL_Surface *text = mainui_theme_text(theme, theme->hint_font, value, theme->total_color);

@@ -53,6 +53,9 @@ typedef struct {
     SDL_Surface *tiles[2], *dots[2], *buttons[2];
     SDL_Color grid_color[2], hint_color, title_color, page_color, total_color;
     bool hide_icons, hide_hints;
+    /* Font size 0 in config.json: stock draws no text in that role. The font
+     * itself still opens at the default size for dialogs and other screens. */
+    bool hide_title_text, hide_hint_text, hide_grid_text, hide_expert_text;
     char directory[4096], fallback[4096], sd[4096], profile[4096];
     SDL_Color color;
     int icon_margin;
