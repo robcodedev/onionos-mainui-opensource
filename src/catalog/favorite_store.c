@@ -247,7 +247,10 @@ static bool reference_kept(const cJSON *record, const char *key, const MainUILib
 
 bool mainui_favorite_store_lossless(const MainUIFavoriteStore *store, const MainUILibrary *library)
 {
-    if (!store->original) {
+    if (store->source_invalid) {
+        return false;
+    }
+    if (!store->source) {
         return true;
     }
     bool seen_folder[MAINUI_FOLDER_LIMIT] = {0};
@@ -304,7 +307,7 @@ bool mainui_favorite_store_lossless(const MainUIFavoriteStore *store, const Main
 
 bool mainui_favorite_store_keep_damaged(const MainUIFavoriteStore *store)
 {
-    if (!store->original) {
+    if (!store->source) {
         return true;
     }
     const cJSON *generation =
@@ -320,7 +323,7 @@ bool mainui_favorite_store_keep_damaged(const MainUIFavoriteStore *store)
         errno = 0;
         char *existing = mainui_read_text(path, SIDECAR_LIMIT);
         if (existing) {
-            bool same = !strcmp(existing, store->original);
+            bool same = !strcmp(existing, store->source);
             free(existing);
             if (same) {
                 return true; /* a retry of the same repair */
@@ -334,9 +337,9 @@ bool mainui_favorite_store_keep_damaged(const MainUIFavoriteStore *store)
          * the store holds the .mainui-library lock, which makes the locked
          * check-then-rename publication safe. It is strict about the folder
          * flush; a copy that did land is still a kept copy. */
-        if (!mainui_write_bytes_new_locked(path, store->original, strlen(store->original))) {
+        if (!mainui_write_bytes_new_locked(path, store->source, strlen(store->source))) {
             char *written = mainui_read_text(path, SIDECAR_LIMIT);
-            bool landed = written && !strcmp(written, store->original);
+            bool landed = written && !strcmp(written, store->source);
             free(written);
             if (!landed) {
                 return false;
@@ -368,6 +371,18 @@ static bool publish(const char *path, const char *original, const char *text)
     return mainui_write_text_atomic(path, text);
 }
 
+/* A readable header with another schema is a newer format, not damage: it
+ * is left alone rather than repaired into schema 1. */
+static bool newer_schema(const char *text)
+{
+    const char *newline = strchr(text, '\n');
+    cJSON *header = cJSON_ParseWithLength(text, newline ? (size_t)(newline - text) : strlen(text));
+    const cJSON *schema = cJSON_GetObjectItemCaseSensitive(header, "schema");
+    bool other = cJSON_IsNumber(schema) && schema->valuedouble != 1;
+    cJSON_Delete(header);
+    return other;
+}
+
 /* The main sidecar was read but is not a usable schema-1 document, while
  * browsing already shows its .bak. Make editing work the same: keep the
  * damaged bytes as .damaged (never replacing an earlier copy), then publish
@@ -375,12 +390,7 @@ static bool publish(const char *path, const char *original, const char *text)
  * with another schema is a newer format, not damage, and is left alone. */
 static void promote_backup(MainUIFavoriteStore *store)
 {
-    char *newline = strchr(store->original, '\n');
-    cJSON *header = cJSON_ParseWithLength(
-        store->original, newline ? (size_t)(newline - store->original) : strlen(store->original));
-    const cJSON *schema = cJSON_GetObjectItemCaseSensitive(header, "schema");
-    bool other_schema = cJSON_IsNumber(schema) && schema->valuedouble != 1;
-    cJSON_Delete(header);
+    bool other_schema = newer_schema(store->original);
     char backup[sizeof store->path + 8];
     snprintf(backup, sizeof backup, "%s.bak", store->path);
     char *saved = NULL;
@@ -392,7 +402,7 @@ static void promote_backup(MainUIFavoriteStore *store)
     }
     /* keep_damaged() names the copy after the generation it was found with. */
     cJSON *damaged_records = records;
-    MainUIFavoriteStore damaged = {.original = store->original, .records = damaged_records};
+    MainUIFavoriteStore damaged = {.source = store->original, .records = damaged_records};
     snprintf(damaged.path, sizeof damaged.path, "%s", store->path);
     if (!mainui_favorite_store_keep_damaged(&damaged) ||
         !mainui_write_text_atomic(store->path, saved)) {
@@ -402,7 +412,7 @@ static void promote_backup(MainUIFavoriteStore *store)
     }
     fprintf(stderr, "Damaged %s replaced by its backup to allow editing\n", store->path);
     free(store->original);
-    store->original = saved;
+    store->original = store->source = saved;
     store->records = records;
 }
 
@@ -420,8 +430,40 @@ bool mainui_favorite_store_open(MainUIFavoriteStore *store, const char *sd)
         return false;
     }
     store->records = read_document(store->path, &store->original);
+    store->source = store->original;
     if (!store->records && store->original) {
         promote_backup(store);
+    }
+    if (store->records && !store->original) {
+        /* No main sidecar: browsing shows the .bak, so edit that whole
+         * document. The first save creates the main file and leaves the .bak
+         * alone. A .bak that is no usable document is kept as .damaged first;
+         * one that cannot be read, or has a newer schema, stops the edit. */
+        char backup[sizeof store->path + 8];
+        snprintf(backup, sizeof backup, "%s.bak", store->path);
+        errno = 0;
+        char *saved = NULL;
+        cJSON *records = read_document(backup, &saved);
+        if (records && saved) {
+            cJSON_Delete(store->records);
+            store->records = records;
+        }
+        else if (records && !saved) {
+            cJSON_Delete(records); /* no backup either: a new store */
+        }
+        else if (!saved || newer_schema(saved)) {
+            /* Unreadable, or a newer format: change nothing. */
+            cJSON_Delete(records);
+            cJSON_Delete(store->records);
+            store->records = NULL;
+            free(saved);
+            saved = NULL;
+        }
+        else {
+            cJSON_Delete(records);
+            store->source_invalid = true;
+        }
+        store->source = saved;
     }
     return store->records != NULL;
 }
@@ -437,6 +479,9 @@ bool mainui_favorite_store_commit(MainUIFavoriteStore *store, MainUILibrary *lib
 void mainui_favorite_store_close(MainUIFavoriteStore *store)
 {
     mainui_file_unlock(store->lock);
+    if (store->source != store->original) {
+        free(store->source);
+    }
     free(store->original);
     cJSON_Delete(store->records);
     *store = (MainUIFavoriteStore){0};

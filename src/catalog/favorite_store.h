@@ -5,10 +5,15 @@
 #include "platform/files.h"
 
 /* Private editing transaction. Owns the original bytes and parsed records until
- * close; the model editor may adjust record metadata before commit. */
+ * close; the model editor may adjust record metadata before commit.
+ * `original` is the main sidecar as read (NULL: missing), which publication
+ * requires to be unchanged. `source` is the document the edit starts from and
+ * must not lose: the main sidecar, or while it is missing the .bak that
+ * browsing shows, with all its records and its generation. */
 typedef struct {
     char path[4096];
-    char *original;
+    char *original, *source;
+    bool source_invalid; /* a .bak that is not a usable document: keep it first */
     cJSON *records;
     MainUIFileLock *lock;
 } MainUIFavoriteStore;
@@ -20,8 +25,8 @@ bool mainui_favorite_store_open(MainUIFavoriteStore *store, const char *sd);
  * moves cyclic, too deep or dangling folders and assignments to the root, so
  * an edit saves those repairs. A repeated assignment is dropped too, which
  * loses nothing only when it is identical to the first. Over-long folder
- * paths are kept as they are. A missing sidecar has nothing to lose, also
- * when the model came from the .bak copy. */
+ * paths are kept as they are. With no sidecar and no backup there is
+ * nothing to lose. */
 bool mainui_favorite_store_lossless(const MainUIFavoriteStore *store, const MainUILibrary *library);
 /* Before an edit saves a repair, copy the damaged sidecar once to
  * favourite-folders.json.damaged, which no later edit replaces. A different

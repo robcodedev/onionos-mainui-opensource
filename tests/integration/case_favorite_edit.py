@@ -222,15 +222,64 @@ assert create_once(sd, "Unrelated").returncode == 0
 assert any(json.loads(line).get("name") == "Unrelated" for line in sidecar.read_text().splitlines())
 assert not list(sd.glob("Roms/*.damaged*"))
 
-# With only the backup left, an edit restores its folders as before.
+# With only the backup left, edits work on that whole document: its header,
+# unknown fields, other record kinds, assignments of games no longer listed
+# and its generation survive the first edit, which leaves the .bak as it is,
+# and the second, which backs up the first (audit A1).
 sd = fixture("backup-only")
 sidecar = sd / "Roms/favourite-folders.json"
 backup = sd / "Roms/favourite-folders.json.bak"
+with sidecar.open("a", encoding="utf-8") as orphan:
+    orphan.write(json.dumps(dict(kind="item", key="Gone", type=5, folder="container", order=3,
+                                 keep="orphan")) + "\n")
 sidecar.rename(backup)
-assert create_once(sd, "Unrelated").returncode == 0
-names = {json.loads(line).get("name") for line in sidecar.read_text().splitlines()}
-assert {"Container", "Nested", "Unrelated"} <= names, names
+saved = backup.read_bytes()
+
+
+def kept(path):
+    rows = [json.loads(line) for line in path.read_text().splitlines()]
+    return rows[0]["generation"], {row.get("keep") for row in rows}
+
+
+for edit, name in enumerate(("Unrelated", "Second")):
+    assert create_once(sd, name).returncode == 0
+    names = {json.loads(line).get("name") for line in sidecar.read_text().splitlines()}
+    assert {"Container", "Nested", "Unrelated", name} <= names, names
+    generation, keeps = kept(sidecar)
+    assert generation == 5 + edit, generation
+    assert {"header", "folder", "assignment", "opaque", "orphan"} <= keeps, keeps
+    if not edit:
+        assert backup.read_bytes() == saved
+generation, keeps = kept(backup)  # the first edit's result, metadata included
+assert generation == 5 and "orphan" in keeps, (generation, keeps)
 assert not list(sd.glob("Roms/*.damaged*"))
+# A .bak that is no usable document is kept as .damaged before the first
+# edit replaces what browsing shows; one that cannot be read stops the edit.
+sd = fixture("backup-damaged")
+sidecar = sd / "Roms/favourite-folders.json"
+backup = sd / "Roms/favourite-folders.json.bak"
+sidecar.unlink()
+backup.write_bytes(b'{"schema":1,"generation":2}\n{broken\n')
+assert create_once(sd, "Fresh").returncode == 0
+assert (sd / "Roms/favourite-folders.json.damaged").read_bytes() == backup.read_bytes()
+# Only a backup, of a newer schema: refused too, with no main file made from
+# what MainUI could show and no .damaged copy (review C2).
+sd = fixture("backup-newer-schema")
+sidecar = sd / "Roms/favourite-folders.json"
+backup = sd / "Roms/favourite-folders.json.bak"
+sidecar.unlink()
+backup.write_bytes(b'{"schema":2,"generation":0}\n{"kind":"folder","id":"x"}\n')
+saved = backup.read_bytes()
+assert create_once(sd, "Fresh").returncode == 1
+assert not sidecar.exists() and backup.read_bytes() == saved
+assert not list(sd.glob("Roms/*.damaged*"))
+sd = fixture("backup-unreadable")
+sidecar = sd / "Roms/favourite-folders.json"
+backup = sd / "Roms/favourite-folders.json.bak"
+sidecar.unlink()
+backup.mkdir()
+assert create_once(sd, "Fresh").returncode != 0
+assert not sidecar.exists()
 print("Repairs keep the damaged original once; agreeing and backup-only sidecars stay as they are")
 
 
