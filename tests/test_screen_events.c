@@ -172,6 +172,9 @@ static void wake_intervals(MainUIApp *ui)
     assert(mainui_wait_interval(ui, 1400) == 500);
     ui->device_enabled = false;
     assert(mainui_wait_interval(ui, 1400) == 5000);
+    /* mainui_prepare_frame() stamped the selection with SDL_GetTicks(), which
+     * before SDL_Init can be any value; pin it for the checks below. */
+    ui->selected_at = 1000;
     ui->animate = true;
     assert(mainui_wait_interval(ui, 1400) == MAINUI_MARQUEE_FRAME_MS);
     /* A long title in its scroll delay keeps maintenance ticks, capped to wake
@@ -193,6 +196,40 @@ static void wake_intervals(MainUIApp *ui)
     ui->letter_jump.active = ui->animate = false;
     ui->catalog_job.started_at = (Uint32)-100;
     assert(mainui_wait_interval(ui, 100) == 300);
+    reset(ui);
+}
+
+/* SDL_GetTicks() wraps after 49.7 days. Deadlines and intervals that cross
+ * the wrap must behave as they do anywhere else. */
+static void tick_wraparound(MainUIApp *ui)
+{
+    const Uint32 before = 0xFFFFF000u; /* 4096 ms before the wrap */
+    reset(ui);
+    ui->device_enabled = true;
+    ui->animate = true;
+    ui->selected_at = before;
+    ui->config.scroll_delay = 30000;
+    assert(!mainui_marquee_moving(ui, before + 1000));
+    assert(mainui_wait_interval(ui, before + 1000) == 500);
+    assert(mainui_wait_interval(ui, before + 29800) == 200);
+    assert(!mainui_marquee_moving(ui, before + 29959));
+    assert(mainui_marquee_moving(ui, before + 29960));
+    assert(mainui_wait_interval(ui, before + 29960) == MAINUI_MARQUEE_FRAME_MS);
+    ui->animate = false;
+    ui->catalog_job.thread = (SDL_Thread *)ui;
+    ui->catalog_job.started_at = (Uint32)-50;
+    assert(mainui_wait_interval(ui, 50) == 400);
+    ui->catalog_job.thread = NULL;
+
+    ui->device_enabled = false;
+    ui->idle_tick = true;
+    ui->active_at = (Uint32)-2000;
+    ui->presented_at = (Uint32)-100;
+    assert(mainui_frame_current(ui, 100));
+    assert(!mainui_frame_current(ui, (Uint32)-100 + 5000));
+    ui->active_at = (Uint32)-500;
+    assert(!mainui_frame_current(ui, 100));
+
     reset(ui);
 }
 
@@ -358,6 +395,7 @@ int mainui_suite_screen_events(void)
     settings_windows(ui);
     selection_identity(ui);
     wake_intervals(ui);
+    tick_wraparound(ui);
     idle_frame(ui);
     home_and_popups(ui);
     start_is_consumed(ui);
