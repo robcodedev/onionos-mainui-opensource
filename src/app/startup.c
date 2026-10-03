@@ -312,6 +312,64 @@ int mainui_setup_video(MainUIApp *ui)
     return -1;
 }
 
+/* The return from a launch of Onion's Search tool (search, clear, or its
+ * settings), as opposed to a game Search found. */
+static bool search_tool_return(const cJSON *record)
+{
+    const cJSON *tool = cJSON_GetObjectItemCaseSensitive(record, "launch");
+    const cJSON *rom = cJSON_GetObjectItemCaseSensitive(record, "rompath");
+    return cJSON_IsString(tool) && cJSON_IsString(rom) &&
+           !strcmp(tool->valuestring, "/mnt/SDCARD/App/Search/launch.sh") &&
+           (!strcmp(rom->valuestring, tool->valuestring) || !strcmp(rom->valuestring, "search") ||
+            !strcmp(rom->valuestring, "clear") || !strncmp(rom->valuestring, "setstate:", 9) ||
+            strstr(rom->valuestring, "/App/Search/data/") ||
+            cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(record, "app_action")));
+}
+
+/* Onion's X-button shortcut (keymon) starts Search by killing MainUI, so no
+ * return envelope exists; Search then leaves Games -> Search in the stock
+ * state.json, which stock MainUI follows. That state names the console only by
+ * its label: copy it out for comparing with the Search system found by its
+ * data folder. Empty when the state does not end in a console list. */
+static void stock_state_console(const char *directory, char label[256])
+{
+    label[0] = 0;
+    char path[4096];
+    if (snprintf(path, sizeof path, "%s/state.json", directory) >= (int)sizeof path) {
+        return;
+    }
+    char *text = mainui_read_text(path, 64 * 1024);
+    cJSON *root = text ? cJSON_Parse(text) : NULL;
+    const cJSON *list = cJSON_GetObjectItemCaseSensitive(root, "list");
+    const cJSON *last = cJSON_GetArrayItem(list, cJSON_GetArraySize(list) - 1);
+    const cJSON *type = cJSON_GetObjectItemCaseSensitive(last, "type");
+    const cJSON *name = cJSON_GetObjectItemCaseSensitive(last, "emuname");
+    if (cJSON_IsNumber(type) && type->valueint == 5 && cJSON_IsString(name)) {
+        snprintf(label, 256, "%s", name->valuestring);
+    }
+    cJSON_Delete(root);
+    free(text);
+}
+
+/* Labels as stock pads them (" Search "), compared without the padding. */
+static bool same_label(const char *a, const char *b)
+{
+    while (*a == ' ') {
+        a++;
+    }
+    while (*b == ' ') {
+        b++;
+    }
+    size_t la = strlen(a), lb = strlen(b);
+    while (la && a[la - 1] == ' ') {
+        la--;
+    }
+    while (lb && b[lb - 1] == ' ') {
+        lb--;
+    }
+    return la == lb && !strncmp(a, b, la);
+}
+
 void mainui_restore_session(MainUIApp *ui)
 {
     ui->preview_sync_once = true;
@@ -368,6 +426,14 @@ void mainui_restore_session(MainUIApp *ui)
     mainui_menu_view_open(&ui->menu_view, &ui->theme);
     if (ui->handoff_dir && !ui->system_name && !ui->start_systems) {
         cJSON *returned = mainui_launch_take_return(ui->handoff_dir);
+        /* A restored catalog is read fresh from the SD card, so it already has
+         * the Games -> Search that Search created while MainUI was away. */
+        bool from_search = search_tool_return(cJSON_GetObjectItemCaseSensitive(returned, "record"));
+        /* No envelope: MainUI was killed, not left through its own launch. */
+        char stock_label[256] = "";
+        if (!returned) {
+            stock_state_console(ui->handoff_dir, stock_label);
+        }
         MainUISession restored = {0};
         if (returned &&
             mainui_session_restore(&restored, ui->sd, ui->config.case_sensitive, ui->config.rows,
@@ -438,20 +504,21 @@ void mainui_restore_session(MainUIApp *ui)
                 mainui_search_close(&ui->search);
             }
         }
-        const cJSON *record = cJSON_GetObjectItemCaseSensitive(returned, "record");
-        const cJSON *tool = cJSON_GetObjectItemCaseSensitive(record, "launch");
-        const cJSON *rom = cJSON_GetObjectItemCaseSensitive(record, "rompath");
-        if (cJSON_IsString(tool) && cJSON_IsString(rom) &&
-            !strcmp(tool->valuestring, "/mnt/SDCARD/App/Search/launch.sh") &&
-            (!strcmp(rom->valuestring, tool->valuestring) || !strcmp(rom->valuestring, "search") ||
-             !strcmp(rom->valuestring, "clear") || !strncmp(rom->valuestring, "setstate:", 9) ||
-             strstr(rom->valuestring, "/App/Search/data/") ||
-             cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(record, "app_action")))) {
+        /* After Search started by keymon: only if the stock state names the
+         * console that is the Search system. */
+        bool stock_search = false;
+        for (int i = 0; *stock_label && i < ui->games->pages[0].count && !stock_search; ++i) {
+            stock_search = mainui_catalog_search_system(ui->games, i) &&
+                           same_label(ui->games->pages[0].entries[i].label, stock_label);
+        }
+        if (from_search || stock_search) {
+            bool found = false;
             while (ui->games->depth) {
                 mainui_catalog_back(ui->games);
             }
             for (int i = 0; i < ui->games->pages[0].count; ++i) {
                 if (mainui_catalog_search_system(ui->games, i)) {
+                    found = true;
                     MainUIViewport target;
                     mainui_grid_restore(&target, ui->games->pages[0].count, i, 4, 2);
                     if (mainui_browser_enter(ui->games, &target, ui->config.rows)) {
@@ -473,8 +540,16 @@ void mainui_restore_session(MainUIApp *ui)
                         ui->view = ui->games_view = target;
                         ui->home = ui->settings_open = false;
                     }
+                    else {
+                        fprintf(stderr, "Search returned, but Games -> Search did not open: %s\n",
+                                ui->games->error);
+                    }
                     break;
                 }
+            }
+            if (!found) {
+                /* After Clear search, for example: the ordinary list stands. */
+                fprintf(stderr, "Search returned; Games has no Search entry\n");
             }
         }
         mainui_session_close(&restored);
