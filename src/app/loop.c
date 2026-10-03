@@ -248,6 +248,9 @@ bool mainui_reap_jobs(MainUIApp *ui)
             completed.catalog = NULL;
         }
         else if (result == JOB_READY && completed.library) {
+            /* Details shows a row of the list being replaced, which may be
+             * gone or moved: back to the list, at the restored selection. */
+            mainui_details_close(&ui->details);
             if (ui->library) {
                 mainui_library_close(ui->library);
                 free(ui->library);

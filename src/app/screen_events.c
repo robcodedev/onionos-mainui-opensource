@@ -370,6 +370,7 @@ void mainui_markers_refresh(MainUIApp *ui, bool force)
         free(ui->favorites);
     }
     ui->favorites = fresh;
+    mainui_details_markers(&ui->details, ui->favorites);
     ui->cached_start = -1;
 }
 

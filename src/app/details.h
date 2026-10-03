@@ -9,7 +9,7 @@
 typedef struct {
     bool open, favorite;
     int scroll_line, lines_per_page, line_count, ordinal, total;
-    char title[4096], system[4096];
+    char title[4096], system[4096], rom[MAINUI_PATH_MAX];
     MainUIMetadata metadata;
     MainUIPreview *preview;
     /* The shown game, for its cover: borrowed like the list models. */
@@ -30,6 +30,8 @@ void mainui_details_key(MainUIDetails *details, MainUICatalog *catalog,
  * slow decode never holds up input; it is drawn when it is done. Snapshots
  * pass MAINUI_PREVIEW_WAIT_FOREVER. */
 void mainui_details_progress(MainUIDetails *details, Uint32 wait_ms);
+/* The Favorite markers were reloaded: update the shown star. */
+void mainui_details_markers(MainUIDetails *details, const MainUILibrary *favorites);
 void mainui_details_draw(MainUIDetails *details, MainUITheme *theme, SDL_Surface *screen);
 void mainui_details_close(MainUIDetails *details);
 #endif

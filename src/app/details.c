@@ -20,6 +20,13 @@ void mainui_details_progress(MainUIDetails *details, Uint32 wait_ms)
     }
 }
 
+void mainui_details_markers(MainUIDetails *details, const MainUILibrary *favorites)
+{
+    if (details->open) {
+        details->favorite = mainui_library_contains(favorites, details->rom);
+    }
+}
+
 static bool folder(MainUICatalog *catalog, const MainUILibrary *library, int row)
 {
     return library ? mainui_library_is_folder(library, row) : mainui_browser_folder(catalog, row);
@@ -98,10 +105,11 @@ bool mainui_details_open(MainUIDetails *details, MainUICatalog *catalog,
     }
     cJSON *record = library ? NULL : mainui_catalog_record(catalog, index);
     const cJSON *saved_rom = cJSON_GetObjectItemCaseSensitive(record, "rompath");
-    details->favorite =
-        mainui_library_contains(favorites, library                     ? rom
-                                           : cJSON_IsString(saved_rom) ? saved_rom->valuestring
-                                                                       : "");
+    snprintf(details->rom, sizeof details->rom, "%s",
+             library                     ? rom
+             : cJSON_IsString(saved_rom) ? saved_rom->valuestring
+                                         : "");
+    details->favorite = mainui_library_contains(favorites, details->rom);
     cJSON_Delete(record);
     mainui_gamelist_metadata(host, root, &details->metadata);
     /* Match the reference metadata parser's collapsed XML whitespace. */
