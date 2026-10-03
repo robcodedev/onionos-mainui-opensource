@@ -25,7 +25,7 @@ OPT        ?= -O1 -g
 STD        ?= -std=c11
 WARN       ?= -Wall -Wextra -Wshadow -Wredundant-decls -Werror
 PYTHON     ?= python3
-VERSION    ?= 1.0.2
+VERSION    ?= 1.0.3
 
 SDL_CFLAGS ?= $(shell sdl-config --cflags 2>/dev/null)
 SDL_LIBS   ?= $(shell sdl-config --libs 2>/dev/null) -lSDL_image -lSDL_ttf

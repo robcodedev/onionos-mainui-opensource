@@ -6,7 +6,7 @@ Written in C11 against SDL 1.2, the same libraries Onion already ships.
 
 Based on functionality from the [patched MainUI project](https://github.com/robcodedev/onionos-mainui-patcher).
 
-**Version 1.0.2.** It runs on hardware and is usable, but keep a copy of your original SD card.
+**Version 1.0.3.** It runs on hardware and is usable, but keep a copy of your original SD card.
 
 ## Why
 
@@ -22,7 +22,7 @@ Supported devices: Mini Plus, Mini, and Mini Flip.
 
 Working: console and ROM browsing against the SQLite ROM caches, Recents, Favorites and folder editing, search, the Apps list, game launch and return, themes, the stock settings screens, and the `miyoogamelist.xml` metadata used for display names and box art.
 
-Known gaps: behaviour has been checked on a Mini Plus more than on the other two models. Bug reports naming the model and describing the SD card layout are the most useful thing you can send.
+Tested on the Mini Plus, Mini v4 and Mini Flip, which behave the same. MainUI runs at 640x480 on every model. Switching between that and a game's own resolution on the Mini v4 and Mini Flip relies on Onion 4.5-dev fixes that are submitted but not merged yet. Bug reports naming the model and describing the SD card layout are the most useful thing you can send.
 
 If something goes wrong, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md), including how to enable logging and how to resolve an interrupted ROM deletion.
 
