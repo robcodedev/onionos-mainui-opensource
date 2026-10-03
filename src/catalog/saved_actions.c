@@ -28,7 +28,7 @@ static bool same(const cJSON *a, const cJSON *b)
 {
     const char *rom = real_rom(a), *other = real_rom(b);
     if (*rom || *other) {
-        return !strcmp(rom, other);
+        return mainui_same_rom(rom, other);
     }
     return !strcmp(string(a, "launch"), string(b, "launch")) &&
            !strcmp(string(a, "label"), string(b, "label"));
@@ -40,7 +40,9 @@ static bool exact(const cJSON *a, const cJSON *b)
 {
     const cJSON *ta = cJSON_GetObjectItemCaseSensitive(a, "type");
     const cJSON *tb = cJSON_GetObjectItemCaseSensitive(b, "type");
-    return !strcmp(real_rom(a), real_rom(b)) && !strcmp(string(a, "launch"), string(b, "launch")) &&
+    const char *rom = real_rom(a), *other = real_rom(b);
+    return (*rom || *other ? mainui_same_rom(rom, other) : true) &&
+           !strcmp(string(a, "launch"), string(b, "launch")) &&
            !strcmp(string(a, "label"), string(b, "label")) &&
            (cJSON_IsNumber(ta) ? ta->valueint : 5) == (cJSON_IsNumber(tb) ? tb->valueint : 5);
 }

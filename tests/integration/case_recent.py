@@ -190,4 +190,25 @@ path.write_bytes((json.dumps(b) + "\n{other damage\n").encode("utf-8"))
 add(a)
 assert read() == [a, b] and damaged_copy.read_bytes() == original  # first copy kept
 damaged_copy.unlink()
+
+# One game, two spellings: a console list keeps the stock "Emu/FC/../../Roms"
+# path while Search normalizes it (with a launcher prefix in its transport).
+# Membership and Add must agree on both, so Search sees the Favorite and adding
+# it again does not duplicate it.
+stock = dict(label="Same", rompath="/mnt/SDCARD/Emu/FC/../../Roms/FC/same.nes",
+             launch="/mnt/SDCARD/Emu/FC/launch.sh", type=5)
+favourites.write_text(json.dumps(stock) + "\n", encoding="utf-8")
+sidecar.unlink(missing_ok=True)
+(sidecar.parent / "favourite-folders.json.bak").unlink(missing_ok=True)
+def fixture_out(*args):
+    return subprocess.run([str(BUILD / "fixture-recent"), str(sd)] + list(args), timeout=20,
+                          capture_output=True, text=True)
+for spelling in ("/mnt/SDCARD/Roms/FC/same.nes",
+                 "/mnt/SDCARD/Emu/FC/launch.sh:/mnt/SDCARD/Roms//FC/./same.nes"):
+    assert fixture_out("is-favorite", spelling).stdout.strip() == "yes", spelling
+before = favourites.read_bytes()
+assert fixture_out("add-favorite", json.dumps(dict(stock, rompath="/mnt/SDCARD/Roms/FC/same.nes"))).returncode == 0
+assert favourites.read_bytes() == before
+assert fixture_out("is-favorite", "/mnt/SDCARD/Roms/FC/other.nes").stdout.strip() == "no"
+favourites.unlink()
 print("Recent writer scenarios passed")

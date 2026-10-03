@@ -477,7 +477,9 @@ static bool forget_assignment_unlocked(const char *sd, const cJSON *removed)
     for (cJSON *record = records->child; record;) {
         cJSON *next = record->next;
         const cJSON *record_type = cJSON_GetObjectItemCaseSensitive(record, "type");
-        if (!strcmp(string(record, "kind"), "item") && !strcmp(string(record, "key"), key) &&
+        bool match = *rom ? mainui_same_rom(string(record, "key"), rom)
+                          : !strcmp(string(record, "key"), key);
+        if (!strcmp(string(record, "kind"), "item") && match &&
             (cJSON_IsNumber(record_type) ? record_type->valueint : 5) == type) {
             changed = true;
             cJSON_Delete(cJSON_DetachItemViaPointer(records, record));
@@ -529,7 +531,7 @@ static bool assignment_still_used(const char *sd, const cJSON *removed, bool *us
         cJSON *item = cJSON_ParseWithLength(line, size);
         const cJSON *item_type = cJSON_GetObjectItemCaseSensitive(item, "type");
         if (cJSON_IsObject(item) && (cJSON_IsNumber(item_type) ? item_type->valueint : 5) == type) {
-            *used = *rom ? !strcmp(string(item, "rompath"), rom)
+            *used = *rom ? mainui_same_rom(string(item, "rompath"), rom)
                          : !*string(item, "rompath") &&
                                !strcmp(string(item, "launch"), string(removed, "launch")) &&
                                !strcmp(string(item, "label"), string(removed, "label"));

@@ -1385,8 +1385,9 @@ cJSON *mainui_catalog_record(MainUICatalog *catalog, int index)
         const char *dir = portable_path(portable, catalog->sd, base);
         const char *file = strrchr(entry->path, '/') + 1;
         const char *dot = strrchr(file, '.');
-        /* Match stock 1:1: path spelling is identity for Favorites, Recents
-         * and GameSwitcher. Never normalize or depend on artwork lookup. */
+        /* Write the stock spelling 1:1: Favorites, Recents and GameSwitcher
+         * store it as is. Never normalize it here or depend on artwork lookup;
+         * comparisons go through mainui_rom_key() instead. */
         /* Absolute config paths already contain their prefix. Preserve them
          * verbatim too; prepending the console directory would break launch. */
         bool absolute_rom = console->raw_rompath[0] == '/';

@@ -40,11 +40,30 @@ static int restore(const char *sd, bool recent, int index)
  * fixture-recent SD remove INDEX: remove the INDEXth row Recents shows.
  * fixture-recent SD remove-favorite LABEL: remove the Favorite with that label.
  * fixture-recent SD clear: clear Recents, as after the confirmation.
+ * fixture-recent SD add-favorite RECORD / is-favorite ROMPATH: Add Favorite,
+ * and the membership test the context menu uses.
  * fixture-recent SD restore recents|favorites INDEX: see restore(). */
 int main(int argc, char **argv)
 {
     if (argc == 5 && !strcmp(argv[2], "restore")) {
         return restore(argv[1], !strcmp(argv[3], "recents"), atoi(argv[4]));
+    }
+    if (argc == 4 && !strcmp(argv[2], "add-favorite")) {
+        cJSON *record = cJSON_Parse(argv[3]);
+        bool ok = record && mainui_saved_action(argv[1], false, SAVED_ADD, record);
+        cJSON_Delete(record);
+        return ok ? 0 : 1;
+    }
+    if (argc == 4 && !strcmp(argv[2], "is-favorite")) {
+        MainUILibrary *library = calloc(1, sizeof *library);
+        bool member = library && mainui_library_open(library, argv[1], false) &&
+                      mainui_library_contains(library, argv[3]);
+        if (library) {
+            mainui_library_close(library);
+        }
+        free(library);
+        puts(member ? "yes" : "no");
+        return 0;
     }
     if (argc == 3 && !strcmp(argv[2], "clear")) {
         return mainui_saved_action(argv[1], true, SAVED_CLEAR, NULL) ? 0 : 1;

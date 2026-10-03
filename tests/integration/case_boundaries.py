@@ -99,7 +99,9 @@ assert marked != normal
 stock_path = record["rompath"]
 record["rompath"] = "/mnt/SDCARD/Roms/Normal/alpha.nes"
 write(SD / "Roms/favourite.json", json.dumps(record) + "\n")
-assert capture("tidied-path-no-match", "EEDD") == normal
+# One game, one identity: the tidied spelling of the same ROM (as Search
+# records it) marks the console row too. Stock compared the spelling.
+assert capture("tidied-path-match", "EEDD") == marked
 record["rompath"] = stock_path
 write(SD / "Roms/favourite.json", json.dumps(record) + "\n")
 assert capture("marked-parent", "EEDE") == capture("marked-parent-again", "EEDE")

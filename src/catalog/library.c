@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "catalog/library.h"
+#include "catalog/catalog.h"
 #include "platform/files.h"
 #include <errno.h>
 #include <limits.h>
@@ -41,6 +42,60 @@ static cJSON *next_record(char **cursor)
     }
     *cursor = end ? end + 1 : line + strlen(line);
     return cJSON_ParseWithOpts(line, NULL, true);
+}
+
+bool mainui_rom_key(char *out, const char *rompath)
+{
+    const char *transport = strstr(rompath, "launch.sh:");
+    const char *in = transport ? transport + strlen("launch.sh:") : rompath;
+    size_t used = 0;
+    bool absolute = *in == '/';
+    while (*in) {
+        while (*in == '/') {
+            in++;
+        }
+        const char *end = strchr(in, '/');
+        size_t length = end ? (size_t)(end - in) : strlen(in);
+        if (!length) {
+            break;
+        }
+        bool parent = length == 2 && in[0] == '.' && in[1] == '.';
+        if ((length == 1 && in[0] == '.') || (parent && !used && absolute)) {
+            /* "." and ".." at the root change nothing */
+        }
+        else if (parent && used &&
+                 !(used >= 2 && !strncmp(out + used - 2, "..", 2) &&
+                   (used == 2 || out[used - 3] == '/'))) {
+            while (used && out[used - 1] != '/') {
+                used--;
+            }
+            if (used) {
+                used--; /* the separator before the dropped segment */
+            }
+        }
+        else {
+            if (used + (used || absolute) + length >= MAINUI_PATH_MAX) {
+                return false;
+            }
+            if (used || absolute) {
+                out[used++] = '/';
+            }
+            memcpy(out + used, in, length);
+            used += length;
+        }
+        in += length;
+    }
+    if (!used && absolute) {
+        out[used++] = '/';
+    }
+    out[used] = 0;
+    return true;
+}
+
+bool mainui_same_rom(const char *a, const char *b)
+{
+    char left[MAINUI_PATH_MAX], right[MAINUI_PATH_MAX];
+    return *a && *b && mainui_rom_key(left, a) && mainui_rom_key(right, b) && !strcmp(left, right);
 }
 
 MainUIRecentIdentity mainui_recent_identity(const cJSON *record)
@@ -599,7 +654,7 @@ bool mainui_library_contains(const MainUILibrary *library, const char *rom)
         return false;
     }
     for (int i = 0; i < library->count; i++) {
-        if (!strcmp(library->items[i].rom, rom)) {
+        if (mainui_same_rom(library->items[i].rom, rom)) {
             return true;
         }
     }

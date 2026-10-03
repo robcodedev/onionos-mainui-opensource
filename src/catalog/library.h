@@ -40,6 +40,15 @@ typedef struct {
  * normal path is absent. Never merge files or replace an existing destination. */
 bool mainui_library_restore_recent(const char *sd);
 
+/* The one key for comparing a game's ROM across routes. Search spells a
+ * result's ROM normalized and may carry its "<launcher>launch.sh:" prefix,
+ * while console lists keep the stock spelling ("Emu/FC/../../Roms/..."), so
+ * strip the prefix and normalize . , .. and // lexically. Only for comparing:
+ * files keep the spelling they were written with. False if it does not fit. */
+bool mainui_rom_key(char *out, const char *rompath); /* out: MAINUI_PATH_MAX bytes */
+/* Both name the same ROM by mainui_rom_key(); empty paths never match. */
+bool mainui_same_rom(const char *a, const char *b);
+
 /* Effective Recent identity: Search writes its source launcher before the
  * ROM ("<...>/launch.sh:<rom>"), which counts as that launcher and ROM.
  * Otherwise launch and rompath as written. Borrowed pointers into record;
