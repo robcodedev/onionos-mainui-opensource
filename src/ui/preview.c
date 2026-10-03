@@ -256,7 +256,9 @@ void mainui_preview_request_within(MainUIPreview *preview, MainUICatalog *catalo
         }
         else {
             snprintf(preview->loading, sizeof preview->loading, "%s", path);
-            atomic_init(&preview->done, false);
+            /* The flag is reused across decodes, so store, not initialize:
+             * atomic_init on a live object is not an atomic operation. */
+            atomic_store(&preview->done, false);
             preview->thread = SDL_CreateThread(decode_image, preview);
             if (!preview->thread) {
                 preview->pending = false;
@@ -284,7 +286,7 @@ void mainui_preview_request_within(MainUIPreview *preview, MainUICatalog *catalo
                 continue;
             }
             snprintf(preview->loading, sizeof preview->loading, "%s", neighbor);
-            atomic_init(&preview->done, false);
+            atomic_store(&preview->done, false);
             preview->thread = SDL_CreateThread(decode_image, preview);
             break;
         }
