@@ -84,6 +84,7 @@ typedef struct {
     bool reload_search;
     Uint32 next_catalog_check;
     int timer_interval;
+    bool timer_failure_logged;
     bool search_keyboard;
     bool wifi_was_visible;
     MainUICatalog *apps;

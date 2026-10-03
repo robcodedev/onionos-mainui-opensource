@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "app/browser.h"
+#include "app/loop.h"
 #include "catalog/catalog.h"
 #include "catalog/delete.h"
 #include "catalog/favorite_edit.h"
@@ -45,6 +46,33 @@ int main(int argc, char **argv)
         }
         free(catalog);
         return ok ? 0 : 3;
+    }
+    if (!strcmp(mode, "ticks")) {
+        /* Three maintenance wakes with nothing else happening. */
+        MainUIApp *ui = calloc(1, sizeof *ui);
+        if (!ui || SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0) {
+            free(ui);
+            return 4;
+        }
+        ui->running = ui->device_enabled = true;
+        ui->confirmation = -1;
+        int ticks = 0;
+        Uint32 started = SDL_GetTicks();
+        for (int i = 0; i < 3; ++i) {
+            SDL_Event event;
+            if (!mainui_wait_event(ui, &event)) {
+                break;
+            }
+            ticks += event.type == SDL_USEREVENT && event.user.code == MAINUI_TICK_CODE;
+        }
+        printf("ticks=%d elapsed=%u timer=%d\n", ticks, (unsigned)(SDL_GetTicks() - started),
+               ui->timer != NULL);
+        if (ui->timer) {
+            SDL_RemoveTimer(ui->timer);
+        }
+        SDL_Quit();
+        free(ui);
+        return ticks == 3 ? 0 : 3;
     }
     if (!strcmp(mode, "hold")) {
         snprintf(path, sizeof path, "%s/system.json", root);

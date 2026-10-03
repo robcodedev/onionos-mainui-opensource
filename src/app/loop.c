@@ -405,6 +405,42 @@ static void paced_wait(MainUIApp *ui, SDL_Event *event)
     }
 }
 
+static SDL_TimerID add_timer(Uint32 interval)
+{
+#ifdef MAINUI_TEST_FAULTS
+    if (getenv("MAINUI_TEST_TIMER_FAILURE")) {
+        return NULL;
+    }
+#endif
+    return SDL_AddTimer(interval, timer_tick, NULL);
+}
+
+/* Without the SDL timer, SDL_WaitEvent would block until input arrives and
+ * battery, Wi-Fi and catalog checks would stop. Wait on a deadline instead
+ * and post the tick ourselves; the timer is retried on the next wait. */
+static void deadline_wait(MainUIApp *ui, SDL_Event *event, int interval)
+{
+    if (!ui->timer_failure_logged) {
+        fprintf(stderr, "SDL_AddTimer failed (%s); waking on a %d ms deadline\n", SDL_GetError(),
+                interval);
+        ui->timer_failure_logged = true;
+    }
+    Uint32 deadline = SDL_GetTicks() + (Uint32)interval;
+    for (;;) {
+        if (SDL_PollEvent(event)) {
+            return;
+        }
+        Sint32 remaining = (Sint32)(deadline - SDL_GetTicks());
+        if (remaining <= 0) {
+            memset(event, 0, sizeof *event);
+            event->type = SDL_USEREVENT;
+            event->user.code = MAINUI_TICK_CODE;
+            return;
+        }
+        SDL_Delay(remaining > 10 ? 10 : (Uint32)remaining);
+    }
+}
+
 bool mainui_wait_event(MainUIApp *ui, SDL_Event *event)
 {
     int interval = mainui_wait_interval(ui, SDL_GetTicks());
@@ -420,7 +456,7 @@ bool mainui_wait_event(MainUIApp *ui, SDL_Event *event)
     }
     if (!ui->timer && !paced) {
         ui->timer_interval = interval;
-        ui->timer = SDL_AddTimer((Uint32)interval, timer_tick, NULL);
+        ui->timer = add_timer((Uint32)interval);
     }
     bool scripted_event = false;
     memset(event, 0, sizeof *event);
@@ -452,6 +488,9 @@ bool mainui_wait_event(MainUIApp *ui, SDL_Event *event)
     }
     else if (paced) {
         paced_wait(ui, event);
+    }
+    else if (!ui->timer) {
+        deadline_wait(ui, event, interval);
     }
     else if (!SDL_WaitEvent(event)) {
         ui->status = 4;
