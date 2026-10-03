@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "catalog/names.h"
 #include "ui/artwork.h"
+#include "ui/menu_view.h"
 #include "ui/preview.h"
 #ifdef main
 #undef main
@@ -117,6 +118,98 @@ int main(int argc, char **argv)
     theme.background = NULL;
     theme.background = mainui_theme_image(&theme, "theme-big.png");
     assert(theme.background);
+    mainui_theme_close(&theme);
+
+    /* Console icons stay within the menu icon budget, share one surface when
+     * the selected icon is the same file (or cannot be loaded), and Expert
+     * keeps only the 192x72 it draws (lifecycle audit L2). */
+    snprintf(theme.directory, sizeof theme.directory, "%s", argv[1]);
+    snprintf(theme.fallback, sizeof theme.fallback, "%s", argv[1]);
+    theme.hide_grid_text = theme.hide_expert_text = true;
+    char mid[4096], other[4096], big[4096], missing[4096];
+    snprintf(mid, sizeof mid, "%s/icon-mid.png", argv[1]);
+    snprintf(other, sizeof other, "%s/icon-other.png", argv[1]);
+    snprintf(big, sizeof big, "%s/icon-big.png", argv[1]);
+    snprintf(missing, sizeof missing, "%s/no-such-icon.png", argv[1]);
+    MainUIEntry consoles[9];
+    for (int i = 0; i < 9; ++i) {
+        consoles[i] = (MainUIEntry){.label = "Console", .icon = mid};
+    }
+    consoles[7].icon = NULL; /* no icon at all */
+    MainUICatalog *grid = calloc(1, sizeof *grid);
+    assert(grid);
+    grid->pages[0].entries = consoles;
+    grid->pages[0].count = grid->pages[0].loaded = 8;
+    snprintf(grid->pages[0].title, sizeof grid->pages[0].title, "Games");
+    MainUIViewport page = {.total = 8, .selected = 0, .start = 0, .end = 7};
+    MainUIMenuView view;
+    mainui_menu_view_open(&view, &theme);
+    mainui_menu_view_page(&view, grid, &page);
+    /* 1200x1200 RGB icons (about 4.1 MiB each) are kept whole; five fit. */
+    for (int i = 0; i < 5; ++i) {
+        assert(view.console_icons[i][0] && view.console_icons[i][1] == view.console_icons[i][0]);
+        assert(view.console_icons[i][0]->w == 1200 && view.console_icons[i][0]->h == 1200);
+    }
+    assert(!view.console_icons[5][0] && !view.console_icons[6][0]);
+    assert(!view.console_icons[7][0] && !view.console_icons[7][1]);
+    assert(mainui_menu_view_bytes(&view) <= 24u * 1024u * 1024u);
+    /* Replacing the page releases a shared surface exactly once: an extra
+     * reference taken here must be the only one left. */
+    SDL_Surface *shared = view.console_icons[0][0];
+    shared->refcount++;
+    consoles[0].icon_selected = other;   /* distinct */
+    consoles[1].icon_selected = missing; /* falls back to the normal icon */
+    view.cached_start = -1;
+    mainui_menu_view_page(&view, grid, &page);
+    assert(shared->refcount == 1);
+    SDL_FreeSurface(shared);
+    assert(view.console_icons[0][1] && view.console_icons[0][1] != view.console_icons[0][0]);
+    assert(view.console_icons[1][0] && view.console_icons[1][1] == view.console_icons[1][0]);
+    assert(mainui_menu_view_bytes(&view) <= 24u * 1024u * 1024u);
+    SDL_Surface *normal = view.console_icons[0][0], *selected = view.console_icons[0][1],
+                *fallback = view.console_icons[1][0];
+    normal->refcount++;
+    selected->refcount++;
+    fallback->refcount++;
+    /* Expert shows the centered 192x72 of each of its nine icons. */
+    for (int i = 0; i < 9; ++i) {
+        consoles[i] = (MainUIEntry){.label = "Console", .icon = big};
+    }
+    snprintf(grid->pages[0].title, sizeof grid->pages[0].title, "Expert");
+    grid->pages[0].count = grid->pages[0].loaded = 9;
+    page = (MainUIViewport){.total = 9, .selected = 0, .start = 0, .end = 8};
+    view.cached_start = -1;
+    mainui_menu_view_page(&view, grid, &page);
+    assert(normal->refcount == 1 && selected->refcount == 1 && fallback->refcount == 1);
+    SDL_FreeSurface(normal);
+    SDL_FreeSurface(selected);
+    SDL_FreeSurface(fallback);
+    for (int i = 0; i < 9; ++i) {
+        assert(view.console_icons[i][0]->w == 192 && view.console_icons[i][0]->h == 72);
+    }
+    /* With the budget taken (here by home icons), icons are left out. */
+    for (int i = 0; i < 2; ++i) {
+        view.home_icons[0][i] =
+            SDL_CreateRGBSurface(SDL_SWSURFACE, 2000, 1600, 32, 0xff0000, 0xff00, 0xff, 0xff000000);
+        assert(view.home_icons[0][i]);
+    }
+    view.cached_start = -1;
+    mainui_menu_view_page(&view, grid, &page);
+    assert(!view.console_icons[0][0] && !view.console_icons[0][1]);
+    /* Closing releases a shared surface once as well. */
+    for (int i = 0; i < 2; ++i) {
+        SDL_FreeSurface(view.home_icons[0][i]);
+        view.home_icons[0][i] = NULL;
+    }
+    view.cached_start = -1;
+    mainui_menu_view_page(&view, grid, &page);
+    shared = view.console_icons[0][0];
+    assert(shared && view.console_icons[0][1] == shared);
+    shared->refcount++;
+    mainui_menu_view_close(&view);
+    assert(shared->refcount == 1);
+    SDL_FreeSurface(shared);
+    free(grid);
     mainui_theme_close(&theme);
 
     MainUINameLookup names = {0};

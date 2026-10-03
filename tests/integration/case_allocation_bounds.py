@@ -30,6 +30,9 @@ def main():
     with tempfile.TemporaryDirectory(prefix="allocation-bounds-", dir=BUILD) as directory:
         root = Path(directory)
         png(root / "theme-big.png", 1000, 1000)
+        png(root / "icon-big.png", 2000, 2000)
+        png(root / "icon-mid.png", 1200, 1200)
+        png(root / "icon-other.png", 1200, 1200)
         png(root / "small.png", 1, 1)
         png(root / "edge.png", 2000, 1)
         png(root / "wide.png", 2001, 1)

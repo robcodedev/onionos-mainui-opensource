@@ -35,17 +35,109 @@ static void frame(MainUITheme *theme, SDL_Surface *screen, const char *title, in
 static void clear_consoles(MainUIMenuView *view)
 {
     for (int i = 0; i < 9; i++) {
-        for (int selected = 0; selected < 2; selected++) {
-            if (view->console_icons[i][selected]) {
-                SDL_FreeSurface(view->console_icons[i][selected]);
+        /* The selected icon may share the normal one's surface: free it once. */
+        SDL_Surface *normal = view->console_icons[i][0], *selected = view->console_icons[i][1];
+        if (selected && selected != normal) {
+            SDL_FreeSurface(selected);
+        }
+        if (normal) {
+            SDL_FreeSurface(normal);
+        }
+        for (int state = 0; state < 2; state++) {
+            if (view->console_labels[i][state]) {
+                SDL_FreeSurface(view->console_labels[i][state]);
             }
-            if (view->console_labels[i][selected]) {
-                SDL_FreeSurface(view->console_labels[i][selected]);
-            }
-            view->console_icons[i][selected] = NULL;
-            view->console_labels[i][selected] = NULL;
+            view->console_icons[i][state] = NULL;
+            view->console_labels[i][state] = NULL;
         }
     }
+}
+
+/* Menu icons are decoded at full size, so a large icon pack could hold far
+ * more memory than the screen shows. All of them together stay within this
+ * budget; Expert icons keep only the part Expert draws. */
+#define MENU_ICON_BUDGET (24u * 1024u * 1024u)
+
+static size_t surface_bytes(const SDL_Surface *surface)
+{
+    return surface ? (size_t)surface->pitch * (size_t)surface->h : 0;
+}
+
+size_t mainui_menu_view_bytes(const MainUIMenuView *view)
+{
+    size_t bytes = 0;
+    for (int i = 0; i < MAINUI_MENU_SECTIONS; i++) {
+        bytes += surface_bytes(view->home_icons[i][0]) + surface_bytes(view->home_icons[i][1]);
+    }
+    for (int i = 0; i < 9; i++) {
+        bytes += surface_bytes(view->console_icons[i][0]);
+        if (view->console_icons[i][1] != view->console_icons[i][0]) {
+            bytes += surface_bytes(view->console_icons[i][1]);
+        }
+    }
+    return bytes;
+}
+
+/* The centered part of `image` that fits width x height, as a copy with the
+ * same pixel format, transparency and palette; the original is freed. On
+ * failure the original is returned. */
+static SDL_Surface *crop(SDL_Surface *image, int width, int height)
+{
+    int w = image->w < width ? image->w : width, h = image->h < height ? image->h : height;
+    if (w == image->w && h == image->h) {
+        return image;
+    }
+    SDL_PixelFormat *format = image->format;
+    SDL_Surface *out =
+        SDL_CreateRGBSurface(SDL_SWSURFACE, w, h, format->BitsPerPixel, format->Rmask,
+                             format->Gmask, format->Bmask, format->Amask);
+    if (!out || SDL_LockSurface(image)) {
+        if (out) {
+            SDL_FreeSurface(out);
+        }
+        return image;
+    }
+    int x = (image->w - w) / 2, y = (image->h - h) / 2, bytes = format->BytesPerPixel;
+    for (int row = 0; row < h; row++) {
+        memcpy((Uint8 *)out->pixels + row * out->pitch,
+               (const Uint8 *)image->pixels + (y + row) * image->pitch + x * bytes,
+               (size_t)(w * bytes));
+    }
+    SDL_UnlockSurface(image);
+    if (format->palette) {
+        SDL_SetColors(out, format->palette->colors, 0, format->palette->ncolors);
+    }
+    if (image->flags & SDL_SRCCOLORKEY) {
+        SDL_SetColorKey(out, SDL_SRCCOLORKEY, format->colorkey);
+    }
+    SDL_SetAlpha(out, image->flags & SDL_SRCALPHA, format->alpha);
+    SDL_FreeSurface(image);
+    return out;
+}
+
+/* Cropped to width x height when they are set (Expert), or dropped (no icon)
+ * over the budget. Other icons are kept whole: a large one is drawn clipped
+ * by the screen, which no centered crop reproduces. */
+static SDL_Surface *keep_icon(const MainUIMenuView *view, SDL_Surface *icon, int width, int height,
+                              const char *path)
+{
+    if (!icon) {
+        return NULL;
+    }
+    if (width > 0) {
+        icon = crop(icon, width, height);
+    }
+    size_t retained = mainui_menu_view_bytes(view), needed = surface_bytes(icon);
+    if (retained > MENU_ICON_BUDGET || needed > MENU_ICON_BUDGET - retained) {
+        static bool reported;
+        if (!reported) {
+            fprintf(stderr, "Menu icon budget exceeded by %s; showing no icon\n", path);
+            reported = true;
+        }
+        SDL_FreeSurface(icon);
+        return NULL;
+    }
+    return icon;
 }
 
 void mainui_menu_view_open(MainUIMenuView *view, MainUITheme *theme)
@@ -56,7 +148,8 @@ void mainui_menu_view_open(MainUIMenuView *view, MainUITheme *theme)
             char name[80];
             snprintf(name, sizeof name, "skin/ic-%s-%c.png", mainui_menu_icon(i),
                      selected ? 'f' : 'n');
-            view->home_icons[i][selected] = mainui_theme_image(theme, name);
+            view->home_icons[i][selected] =
+                keep_icon(view, mainui_theme_image(theme, name), 0, 0, name);
         }
     }
 }
@@ -150,6 +243,47 @@ void mainui_menu_draw_home(MainUIMenuView *view, SDL_Surface *screen, const Main
     }
 }
 
+void mainui_menu_view_page(MainUIMenuView *view, MainUICatalog *catalog,
+                           const MainUIViewport *position)
+{
+    if (view->cached_start == position->start) {
+        return;
+    }
+    MainUITheme *theme = view->theme;
+    bool expert = !strcmp(catalog->pages[0].title, "Expert");
+    int capacity = expert ? 9 : 8;
+    /* Expert draws the centered 192x72 of an icon. */
+    int width = expert ? 192 : 0, height = expert ? 72 : 0;
+    clear_consoles(view);
+    for (int i = 0; i < capacity && position->start + i < position->total; i++) {
+        MainUIEntry *entry = mainui_catalog_entry(catalog, position->start + i);
+        if (!entry) {
+            continue;
+        }
+        view->console_icons[i][0] = keep_icon(view, mainui_theme_console_icon(theme, entry->icon),
+                                              width, height, entry->icon);
+        /* One file for both states is decoded once. */
+        bool same =
+            !entry->icon_selected || (entry->icon && !strcmp(entry->icon_selected, entry->icon));
+        view->console_icons[i][1] =
+            same ? view->console_icons[i][0]
+                 : keep_icon(view, mainui_theme_console_icon(theme, entry->icon_selected), width,
+                             height, entry->icon_selected);
+        if (!view->console_icons[i][1]) {
+            view->console_icons[i][1] = view->console_icons[i][0];
+        }
+        for (int selected = 0; selected < 2; selected++) {
+            bool expert_font = expert && theme->expert_font;
+            bool hidden = expert_font ? theme->hide_expert_text : theme->hide_grid_text;
+            view->console_labels[i][selected] =
+                hidden ? NULL
+                       : TTF_RenderUTF8_Blended(expert_font ? theme->expert_font : theme->grid_font,
+                                                entry->label, theme->grid_color[selected]);
+        }
+    }
+    view->cached_start = position->start;
+}
+
 void mainui_menu_draw_systems(MainUIMenuView *view, SDL_Surface *screen, MainUICatalog *catalog,
                               const MainUIViewport *position)
 {
@@ -163,32 +297,7 @@ void mainui_menu_draw_systems(MainUIMenuView *view, SDL_Surface *screen, MainUIC
                                                      : mainui_menu_label(MAINUI_MENU_GAMES),
           position->total ? position->start / capacity + 1 : 0,
           (position->total + capacity - 1) / capacity);
-    if (view->cached_start != position->start) {
-        clear_consoles(view);
-        for (int i = 0; i < capacity && position->start + i < position->total; i++) {
-            MainUIEntry *entry = mainui_catalog_entry(catalog, position->start + i);
-            if (!entry) {
-                continue;
-            }
-            for (int selected = 0; selected < 2; selected++) {
-                const char *path =
-                    selected && entry->icon_selected ? entry->icon_selected : entry->icon;
-                view->console_icons[i][selected] = mainui_theme_console_icon(theme, path);
-                if (!view->console_icons[i][selected] && selected) {
-                    view->console_icons[i][selected] =
-                        mainui_theme_console_icon(theme, entry->icon);
-                }
-                bool expert_font = expert && theme->expert_font;
-                bool hidden = expert_font ? theme->hide_expert_text : theme->hide_grid_text;
-                view->console_labels[i][selected] =
-                    hidden ? NULL
-                           : TTF_RenderUTF8_Blended(expert_font ? theme->expert_font
-                                                                : theme->grid_font,
-                                                    entry->label, theme->grid_color[selected]);
-            }
-        }
-        view->cached_start = position->start;
-    }
+    mainui_menu_view_page(view, catalog, position);
     /* Stock Games: 4x2, margins 10, 155x170 cells. Expert: 3x3, no margins,
      * 213x120 cells, centered 192x72 icon crop, label bottom offset 28. */
     for (int i = 0; i < capacity && position->start + i < position->total; i++) {
