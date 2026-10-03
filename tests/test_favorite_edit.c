@@ -46,10 +46,37 @@ static int create_once(const char *sd, const char *name)
     return ok ? 0 : 1;
 }
 
+/* fixture-favorite_edit SD delete ID: remove one root folder; 0 if saved. */
+static int delete_once(const char *sd, const char *id)
+{
+    MainUILibrary *library = calloc(1, sizeof *library);
+    MainUIFavoriteEditor editor = {0};
+    assert(library && mainui_library_open(library, sd, false));
+    int row = -1;
+    for (int i = 0; i < library->visible_count; i++) {
+        int visible = library->visible[i];
+        if (visible < 0 && visible != INT_MIN && !strcmp(library->folders[-visible - 1].id, id)) {
+            row = i;
+        }
+    }
+    assert(row >= 0);
+    bool ok = mainui_favorite_edit(&editor, library, sd, CONTEXT_FAVORITE_DELETE, NULL, &row);
+    if (!ok) {
+        puts(editor.error);
+    }
+    mainui_favorite_editor_close(&editor);
+    mainui_library_close(library);
+    free(library);
+    return ok ? 0 : 1;
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 4 && !strcmp(argv[2], "create")) {
         return create_once(argv[1], argv[3]);
+    }
+    if (argc == 4 && !strcmp(argv[2], "delete")) {
+        return delete_once(argv[1], argv[3]);
     }
     assert(argc == 2);
     MainUILibrary *library = calloc(1, sizeof *library);

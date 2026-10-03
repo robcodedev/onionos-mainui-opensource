@@ -200,3 +200,32 @@ assert {"Container", "Nested", "Unrelated"} <= names, names
 assert not list(sd.glob("Roms/*.damaged*"))
 print("Repairs keep the damaged original once; agreeing and backup-only sidecars stay as they are")
 
+
+# Removing a folder must not leave two same-named folders side by side
+# (review of 1.0.2, finding 3). Ordinary promotion keeps working.
+def delete_once(sd, folder_id):
+    return subprocess.run([str(BUILD / "fixture-favorite_edit"), str(sd), "delete", folder_id],
+                          cwd=ROOT, capture_output=True, text=True, timeout=30)
+
+sd = fixture("promote-collision")
+sidecar = sd / "Roms/favourite-folders.json"
+write_lines(sidecar, [header,
+                      dict(kind="folder", id="a", parent="", name="A", order=0),
+                      dict(kind="folder", id="x", parent="", name="X", order=1),
+                      dict(kind="folder", id="ax", parent="a", name="X", order=0),
+                      dict(kind="item", key="Zebra", type=5, folder="ax", order=0)])
+before = sidecar.read_bytes()
+result = delete_once(sd, "a")
+assert result.returncode == 1 and "same name" in result.stdout, result.stdout
+assert sidecar.read_bytes() == before
+sd = fixture("promote")
+sidecar = sd / "Roms/favourite-folders.json"
+write_lines(sidecar, [header,
+                      dict(kind="folder", id="a", parent="", name="A", order=0),
+                      dict(kind="folder", id="x", parent="", name="X", order=1),
+                      dict(kind="folder", id="a1", parent="a", name="One", order=0),
+                      dict(kind="folder", id="a2", parent="a", name="Two", order=1)])
+assert delete_once(sd, "a").returncode == 0
+rows = {row["id"]: row for row in map(json.loads, sidecar.read_text().splitlines()) if "id" in row}
+assert set(rows) == {"x", "a1", "a2"} and rows["a1"]["parent"] == rows["a2"]["parent"] == ""
+print("Folder removal refuses duplicate sibling names and promotes distinct ones")

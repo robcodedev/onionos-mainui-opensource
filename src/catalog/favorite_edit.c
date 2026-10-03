@@ -360,6 +360,25 @@ static bool name_folder(MainUILibrary *library, int row, const char *input, bool
     return *affected != NULL && folder_paths_fit(library, index);
 }
 
+/* Removing a folder moves its subfolders up a level. Like create, rename and
+ * move, that must not leave two folders of the same name side by side. */
+static bool promotion_fits(const MainUILibrary *library, int index)
+{
+    int parent = library->folders[index].parent;
+    for (int child = 0; child < library->folder_count; child++) {
+        if (library->folders[child].parent != index) {
+            continue;
+        }
+        for (int i = 0; i < library->folder_count; i++) {
+            if (i != index && library->folders[i].parent == parent &&
+                !strcmp(library->folders[i].name, library->folders[child].name)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 static bool delete_folder(MainUILibrary *library, int row)
 {
     if (row == INT_MIN || row >= 0) {
@@ -451,6 +470,11 @@ bool mainui_favorite_edit(MainUIFavoriteEditor *editor, MainUILibrary *library, 
         selected_folder = true;
     }
     else if (action == CONTEXT_FAVORITE_DELETE) {
+        if (row != INT_MIN && row < 0 && !promotion_fits(fresh, -row - 1)) {
+            ok = fail(editor, "A folder inside has the same name as one beside it. "
+                              "Rename it first.");
+            goto cleanup;
+        }
         if (row != INT_MIN && row < 0) {
             MainUILibraryFolder *deleted = &fresh->folders[-row - 1];
             cJSON *record;
