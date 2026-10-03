@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 static const char *string(const cJSON *object, const char *key)
 {
@@ -287,22 +288,57 @@ static bool publish_unlocked(const char *directory, const cJSON *record, const M
     return ok;
 }
 
+/* A return file that can never be read (NUL bytes or over the size limit)
+ * would block every later launch, which may not replace it. Move it aside as
+ * mainui-return.json.bad, or .bad-1 to .bad-9 to keep an earlier copy; the
+ * caller holds the handoff lock and has seen that no command is pending. */
+static void quarantine_return(const char *directory, const char *path)
+{
+    struct stat info;
+    if (lstat(path, &info) || !S_ISREG(info.st_mode)) {
+        return;
+    }
+    for (int i = 0; i < 10; i++) {
+        char bad[4096 + 16], name[32];
+        snprintf(name, sizeof name, i ? "mainui-return.json.bad-%d" : "mainui-return.json.bad", i);
+        if (!join(bad, directory, name)) {
+            return;
+        }
+        bool moved = mainui_move_file_new_locked(path, bad);
+        if (moved || (lstat(path, &info) && errno == ENOENT)) {
+            fprintf(stderr, "Unreadable %s moved aside as %s%s\n", path, bad,
+                    moved ? "" : " (folder not flushed)");
+            return;
+        }
+        if (lstat(bad, &info)) {
+            fprintf(stderr, "Cannot move aside unreadable %s: %s\n", path, strerror(errno));
+            return; /* the move itself failed: keep the file */
+        }
+    }
+}
+
 static cJSON *take_return_unlocked(const char *directory)
 {
     char path[4096];
     if (!join(path, directory, "cmd_to_run.sh")) {
         return NULL;
     }
-    FILE *file = fopen(path, "rb");
-    if (file) {
-        fclose(file);
+    /* Anything at the command path, or not knowing, means a launch may be
+     * pending: its return state stays. */
+    struct stat info;
+    if (!lstat(path, &info) || errno != ENOENT) {
         return NULL;
     }
     if (!join(path, directory, "mainui-return.json")) {
         return NULL;
     }
+    errno = 0;
     char *text = mainui_read_text(path, 256u * 1024u);
     if (!text) {
+        /* Damaged content, never a read error: that may pass. */
+        if (errno == EINVAL || errno == EFBIG) {
+            quarantine_return(directory, path);
+        }
         return NULL;
     }
     cJSON *root = cJSON_ParseWithOpts(text, NULL, true);

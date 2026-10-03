@@ -235,4 +235,34 @@ assert not (HANDOFF / "mainui-return.json").exists()
 write(HANDOFF / "mainui-return.json", '{"schema":1,"record":{},"resume":{"section":2,"view":{"currpos":1.5}}}')
 assert home == capture("malformed-return", handoff=True)
 assert home == capture("malformed-consumed", handoff=True)
+# A return file that can never be read (NUL bytes anywhere, or over 256 KiB)
+# is moved aside, without replacing an earlier copy, so the next launch can
+# publish its own (audit A4).
+valid = json.dumps(dict(schema=1, committed=True, record={}, resume={}))
+unreadable = [b"\0" + valid.encode(), valid[:20].encode() + b"\0" + valid[20:].encode(),
+              valid.encode() + b"\0", b" " * (256 * 1024 + 1)]
+for i, data in enumerate(unreadable):
+    (HANDOFF / "mainui-return.json").write_bytes(data)
+    assert home == capture(f"unreadable-{i}", handoff=True)
+    assert not (HANDOFF / "mainui-return.json").exists()
+    copy = HANDOFF / ("mainui-return.json.bad" + (f"-{i}" if i else ""))
+    assert copy.read_bytes() == data, copy
+    capture(f"unreadable-{i}-launch", "EDDE", "--system", "Host", handoff=True)
+    consume()
+    assert home != capture(f"unreadable-{i}-returned", handoff=True)  # back in the list
+    assert not (HANDOFF / "mainui-return.json").exists()
+assert (HANDOFF / "mainui-return.json.bad").read_bytes() == unreadable[0]
+# A pending command keeps it, and so does a read error (here a directory).
+(HANDOFF / "mainui-return.json").write_bytes(unreadable[0])
+write(HANDOFF / "cmd_to_run.sh", "pending\n")
+capture("unreadable-pending", handoff=True)
+assert (HANDOFF / "mainui-return.json").read_bytes() == unreadable[0]
+assert (HANDOFF / "cmd_to_run.sh").read_text() == "pending\n"
+(HANDOFF / "cmd_to_run.sh").unlink()
+(HANDOFF / "mainui-return.json").unlink()
+(HANDOFF / "mainui-return.json").mkdir()
+assert home == capture("return-read-error", handoff=True)
+assert (HANDOFF / "mainui-return.json").is_dir()
+assert not (HANDOFF / "mainui-return.json.bad-4").exists()
+(HANDOFF / "mainui-return.json").rmdir()
 print("Launch/return fake-consumer tests passed:", SD)
