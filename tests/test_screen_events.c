@@ -144,6 +144,44 @@ static void keyboard_priority(MainUIApp *ui)
     assert(!ui->name_input.open && !ui->settings_keyboard);
 }
 
+/* Holding A after it opened a confirmation never confirms: only a release
+ * and a new press do, once. Focus loss cancels it (interaction review F1). */
+static void held_confirmation(MainUIApp *ui)
+{
+    reset(ui);
+    const MainUIContextAction actions[] = {CONTEXT_SHUTDOWN};
+    mainui_context_rows(&ui->home_context, actions, 1);
+    ui->context = ui->home_context;
+    ui->context_open = true;
+    assert(key_event(ui, SDL_KEYDOWN, SDLK_RETURN, 0));
+    assert(ui->confirmation == CONTEXT_SHUTDOWN);
+    for (int repeat = 0; repeat < 3; repeat++) {
+        assert(key_event(ui, SDL_KEYDOWN, SDLK_RETURN, 0));
+        assert(ui->confirmation == CONTEXT_SHUTDOWN && !*ui->message_title);
+    }
+    assert(key_event(ui, SDL_KEYUP, SDLK_RETURN, 0));
+    assert(ui->confirmation == CONTEXT_SHUTDOWN && !ui->launch_pending);
+    /* The new press confirms: without the runtime, shutdown reports why. */
+    assert(key_event(ui, SDL_KEYDOWN, SDLK_RETURN, 0));
+    assert(ui->confirmation == -1 && *ui->message_title);
+    assert(key_event(ui, SDL_KEYDOWN, SDLK_RETURN, 0)); /* its repeat */
+    assert(*ui->message_title);
+    assert(key_event(ui, SDL_KEYUP, SDLK_RETURN, 0));
+    assert(key_event(ui, SDL_KEYDOWN, SDLK_RETURN, 0));
+    assert(!*ui->message_title);
+    assert(key_event(ui, SDL_KEYUP, SDLK_RETURN, 0));
+
+    ui->context = ui->home_context;
+    ui->context_open = true;
+    assert(key_event(ui, SDL_KEYDOWN, SDLK_RETURN, 0));
+    assert(ui->confirmation == CONTEXT_SHUTDOWN);
+    SDL_Event event = {0};
+    event.type = SDL_ACTIVEEVENT;
+    event.active.state = SDL_APPINPUTFOCUS;
+    assert(mainui_dispatch_event(ui, &event));
+    assert(ui->confirmation == -1 && !ui->return_latched);
+}
+
 static void releases_and_focus(MainUIApp *ui)
 {
     reset(ui);
@@ -418,6 +456,7 @@ int mainui_suite_screen_events(void)
     home_and_popups(ui);
     start_is_consumed(ui);
     keyboard_priority(ui);
+    held_confirmation(ui);
     releases_and_focus(ui);
     free(ui);
     return 0;

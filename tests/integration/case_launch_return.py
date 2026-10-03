@@ -193,14 +193,16 @@ for index in range(4):
     assert new_home == capture("context-return-" + str(index), handoff=True)
 capture("shutdown-cancel", "EDDDDDEB", handoff=True)
 assert not (HANDOFF / ".offOrder").exists()
-capture("shutdown-confirm", "EDDDDDEE", handoff=True)
+capture("shutdown-confirm", "EDDDDDE-EE", handoff=True)  # release A, press again
 assert (HANDOFF / ".offOrder").read_bytes() == b""
 (HANDOFF / ".offOrder").unlink()
 # Delete confirmation removes the selected ROM and derived cache row only.
 two = SD / "Roms/FC/Collection/Two.nes"
 capture("delete-cancel", "EDDDSDDEB", "--system", "Host")
 assert two.exists()
-capture("delete-confirm", "EDDDSDDEE", "--system", "Host")
+capture("delete-held", "EDDDSDDEEEE", "--system", "Host")  # A held: repeats only
+assert two.exists()
+capture("delete-confirm", "EDDDSDDE-EE", "--system", "Host")
 assert not two.exists() and not list(two.parent.glob(two.name + ".mainui-delete*"))
 with sqlite3.connect(SD / "Roms/FC/FC_cache6.db") as database:
     assert database.execute("select count(*) from FC_roms where disp='Two'").fetchone()[0] == 0

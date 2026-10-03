@@ -75,6 +75,7 @@ typedef struct {
     cJSON *context_record;
     bool context_open;
     int confirmation;
+    bool return_latched; /* A pressed for a confirmation or message is still held */
     MainUIStockSettings settings;
     MainUISettingsPage settings_page;
     int settings_keyboard;

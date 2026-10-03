@@ -92,6 +92,14 @@ bool mainui_screen_language_open(MainUIApp *ui, SDLKey key)
     return true;
 }
 
+/* Open a confirmation. When A opened it, A must be released and pressed again
+ * to confirm: key repeat from the press that opened it never counts. */
+static void open_confirmation(MainUIApp *ui, int action)
+{
+    ui->confirmation = action;
+    ui->return_latched = ui->held[SDLK_RETURN];
+}
+
 bool mainui_screen_settings_open(MainUIApp *ui, SDLKey key)
 {
     if (!ui->settings_open) {
@@ -183,7 +191,7 @@ bool mainui_screen_settings_open(MainUIApp *ui, SDLKey key)
     }
     else if (key == SDLK_RETURN && ui->settings.count &&
              ui->settings.rows[ui->settings.selected] == SET_SHUTDOWN) {
-        ui->confirmation = CONTEXT_SHUTDOWN;
+        open_confirmation(ui, CONTEXT_SHUTDOWN);
     }
     else if (key == SDLK_RETURN && ui->settings.count &&
              (ui->settings.rows[ui->settings.selected] == SET_DISPLAY ||
@@ -352,6 +360,8 @@ static bool screen_message_key(MainUIApp *ui, SDLKey key)
     }
     if (key == SDLK_ESCAPE || key == SDLK_RETURN) {
         *ui->message_title = 0;
+        /* A held A that dismissed the message must not act on what is below. */
+        ui->return_latched = key == SDLK_RETURN && ui->held[SDLK_RETURN];
     }
     return true;
 }
@@ -389,6 +399,8 @@ static bool screen_confirmation_key(MainUIApp *ui, SDLKey key)
         ui->confirmation = -1;
     }
     else if (key == SDLK_RETURN) {
+        /* One press acts once: its repeat must not dismiss what follows. */
+        ui->return_latched = ui->held[SDLK_RETURN];
         bool ok = false;
         if (ui->confirmation == CONTEXT_DELETE_ROM) {
             ok = !ui->library && mainui_browser_delete(ui->catalog, &ui->view, ui->config.rows);
@@ -578,11 +590,11 @@ bool mainui_screen_context_menu_key(MainUIApp *ui, SDLKey key, int *requested_se
         return true;
     }
     if (entry->action == CONTEXT_CLEAR_RECENT || entry->action == CONTEXT_SHUTDOWN) {
-        ui->confirmation = entry->action;
+        open_confirmation(ui, entry->action);
         return true;
     }
     if (entry->action == CONTEXT_DELETE_ROM) {
-        ui->confirmation = CONTEXT_DELETE_ROM;
+        open_confirmation(ui, CONTEXT_DELETE_ROM);
         return true;
     }
     if (entry->action == CONTEXT_REFRESH) {
@@ -1189,15 +1201,27 @@ bool mainui_dispatch_event(MainUIApp *ui, SDL_Event *event)
     }
     if (event->type == SDL_ACTIVEEVENT && !event->active.gain &&
         (event->active.state & SDL_APPINPUTFOCUS)) {
-        /* Lost keyup events must not leave a modifier/chord stuck after Alt-Tab. */
+        /* Lost keyup events must not leave a modifier/chord stuck after Alt-Tab.
+         * A pending confirmation is cancelled: its key state is unknown now. */
         memset(ui->held, 0, sizeof ui->held);
         ui->letter_jump.active = false;
+        ui->confirmation = -1;
+        ui->return_latched = false;
     }
     if (event->type == SDL_KEYUP) {
         SDLKey released = mainui_input_key(event->key.keysym.sym);
         if (released >= 0 && released < SDLK_LAST) {
             ui->held[released] = false;
         }
+        if (released == SDLK_RETURN) {
+            ui->return_latched = false;
+        }
+    }
+    /* Key repeat from an A press that opened a confirmation or dismissed a
+     * message: ignored until A is released. */
+    if (event->type == SDL_KEYDOWN && ui->return_latched &&
+        mainui_input_key(event->key.keysym.sym) == SDLK_RETURN) {
+        return true;
     }
     if (ui->catalog_job.thread) {
         if (event->type == SDL_KEYUP && mainui_input_key(event->key.keysym.sym) == SDLK_RETURN) {

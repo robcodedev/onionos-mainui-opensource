@@ -118,6 +118,9 @@ bool mainui_poll_jobs(MainUIApp *ui)
                 SDL_EnableKeyRepeat(ui->config.repeat_delay, ui->config.repeat_interval);
                 ui->letter_jump.active = false;
                 ui->search_confirm_held = ui->search.release_pending = false;
+                /* Sleep cancels a confirmation; held keys are unknown. */
+                ui->confirmation = -1;
+                ui->return_latched = false;
             }
             if (refresh_due && ui->real_device && !ui->device_job.thread && !ui->snapshot) {
                 cJSON *system = mainui_system_read(ui->sd);

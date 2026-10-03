@@ -48,7 +48,8 @@ assert recent.read_bytes()==two.encode()
 before=recent.read_bytes()
 capture('clear-dialog','RRESDDE')
 capture('clear-cancel','RRESDDEB');assert recent.read_bytes()==before
-capture('clear-confirm','RRESDDEE');assert recent.read_bytes()==b''
+capture('clear-held','RRESDDEEEE');assert recent.read_bytes()==before  # A held: repeats only
+capture('clear-confirm','RRESDDE-EE');assert recent.read_bytes()==b''
 assert (SD/'Roms/FC/one.nes').read_bytes()==b'ROM must remain intact'
 # Bad existing data must never be replaced with just the newly selected Favorite.
 for data in [b'{broken', b'{"label":"hidden"}\0trailing bytes']:

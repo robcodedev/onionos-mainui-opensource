@@ -38,3 +38,7 @@ Edits change the list under the window: Create, Rename, Sort, Delete, Move and P
 Folders remember where you were. Back returns to the row and window you entered the folder from, also after editing inside it, at any depth. The remembered place of a folder you have visited survives edits elsewhere, and is dropped only when that folder is removed.
 
 This also holds when the folders were reordered outside MainUI while a game ran: Back selects the folder you came from at its new row.
+
+## Confirmations and messages
+
+Delete ROM, Clear Recents and Shutdown ask before they act. Holding A after it opened the question never answers it: release A and press it again. Likewise, A that confirms or dismisses a message acts once; holding it does nothing more until it is released. Leaving MainUI's focus or going to sleep cancels an open question.
