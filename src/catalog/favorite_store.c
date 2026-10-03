@@ -225,6 +225,128 @@ failed:
     return NULL;
 }
 
+/* An integer `order` as the reader takes it, or absent (the reader's default). */
+static bool order_kept(const cJSON *record, int order)
+{
+    const cJSON *value = cJSON_GetObjectItemCaseSensitive(record, "order");
+    return !value || (cJSON_IsNumber(value) && value->valuedouble == (double)order);
+}
+
+/* `parent`/`folder` as written, against the reader's result: a string naming
+ * the folder it resolved to, or absent/empty for the root. */
+static bool reference_kept(const cJSON *record, const char *key, const MainUILibrary *library,
+                           int folder)
+{
+    const cJSON *value = cJSON_GetObjectItemCaseSensitive(record, key);
+    if (!value) {
+        return folder < 0;
+    }
+    return cJSON_IsString(value) && !strcmp(value->valuestring, parent_id(library, folder));
+}
+
+bool mainui_favorite_store_lossless(const MainUIFavoriteStore *store, const MainUILibrary *library)
+{
+    if (!store->original) {
+        return true;
+    }
+    bool seen_folder[MAINUI_FOLDER_LIMIT] = {0};
+    /* The assignment serialize() keeps for each listed Favorite: the first. */
+    const cJSON **kept = calloc(library->count > 0 ? library->count : 1, sizeof *kept);
+    if (!kept) {
+        return false;
+    }
+    bool ok = true;
+    int folders = 0;
+    const cJSON *record;
+    cJSON_ArrayForEach(record, store->records)
+    {
+        if (!ok) {
+            break;
+        }
+        const char *kind = string(record, "kind");
+        if (!strcmp(kind, "folder")) {
+            /* Each record must be exactly one model folder, unrepaired. */
+            int row = find_row(library, string(record, "id"), true, 0);
+            int index = row == INT_MIN ? -1 : -row - 1;
+            const cJSON *name = cJSON_GetObjectItemCaseSensitive(record, "name");
+            ok = index >= 0 && !seen_folder[index] && cJSON_IsString(name) &&
+                 !strcmp(name->valuestring, library->folders[index].name) &&
+                 reference_kept(record, "parent", library, library->folders[index].parent) &&
+                 order_kept(record, library->folders[index].order);
+            if (ok) {
+                seen_folder[index] = true;
+                folders++;
+            }
+        }
+        else if (!strcmp(kind, "item")) {
+            /* Assignments of listed Favorites are rewritten from the model;
+             * the others are kept byte for byte and need no check. Only the
+             * first assignment of a Favorite is written back, so a repeat is
+             * redundant only if it is identical, extra fields included. */
+            const cJSON *type = cJSON_GetObjectItemCaseSensitive(record, "type");
+            int row = find_row(library, string(record, "key"), false,
+                               cJSON_IsNumber(type) ? type->valueint : 5);
+            if (row != INT_MIN && kept[row]) {
+                ok = cJSON_Compare(record, kept[row], true);
+            }
+            else if (row != INT_MIN) {
+                const MainUILibraryItem *item = &library->items[row];
+                ok = reference_kept(record, "folder", library, item->folder) &&
+                     order_kept(record, item->order);
+                kept[row] = record;
+            }
+        }
+    }
+    free(kept);
+    return ok && folders == library->folder_count;
+}
+
+bool mainui_favorite_store_keep_damaged(const MainUIFavoriteStore *store)
+{
+    if (!store->original) {
+        return true;
+    }
+    const cJSON *generation =
+        cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(store->records, 0), "generation");
+    for (int attempt = 0; attempt < 2; attempt++) {
+        char path[4096];
+        int length = attempt ? snprintf(path, sizeof path, "%s.damaged-%d", store->path,
+                                        cJSON_IsNumber(generation) ? generation->valueint : 0)
+                             : snprintf(path, sizeof path, "%s.damaged", store->path);
+        if (length < 0 || length >= (int)sizeof path) {
+            return false;
+        }
+        errno = 0;
+        char *existing = mainui_read_text(path, SIDECAR_LIMIT);
+        if (existing) {
+            bool same = !strcmp(existing, store->original);
+            free(existing);
+            if (same) {
+                return true; /* a retry of the same repair */
+            }
+            continue;
+        }
+        if (errno != ENOENT) {
+            return false;
+        }
+        /* FAT has no hard links, so not the link()-based no-replace path:
+         * the store holds the .mainui-library lock, which makes the locked
+         * check-then-rename publication safe. It is strict about the folder
+         * flush; a copy that did land is still a kept copy. */
+        if (!mainui_write_bytes_new_locked(path, store->original, strlen(store->original))) {
+            char *written = mainui_read_text(path, SIDECAR_LIMIT);
+            bool landed = written && !strcmp(written, store->original);
+            free(written);
+            if (!landed) {
+                return false;
+            }
+        }
+        fprintf(stderr, "Repaired damaged Favorite folders; the original is kept as %s\n", path);
+        return true;
+    }
+    return false;
+}
+
 static bool publish(const char *path, const char *original, const char *text)
 {
     errno = 0;

@@ -426,6 +426,9 @@ bool mainui_favorite_edit(MainUIFavoriteEditor *editor, MainUILibrary *library, 
         fail(editor, "Cannot read Favorites or sidecar; existing files were preserved.");
         goto cleanup;
     }
+    /* Browsing already shows damaged records repaired; an edit saves that
+     * view, as before, but first keeps the damaged original. */
+    bool repair = !mainui_favorite_store_lossless(&store, fresh);
     if (library->current >= 0) {
         int parent = find_row(fresh, library->folders[library->current].id, true, 0);
         if (parent == INT_MIN) {
@@ -490,6 +493,11 @@ bool mainui_favorite_edit(MainUIFavoriteEditor *editor, MainUILibrary *library, 
     }
     if (!ok) {
         fail(editor, "Invalid name, duplicate, missing item or folder path/depth/cycle limit.");
+        goto cleanup;
+    }
+    if (repair && !mainui_favorite_store_keep_damaged(&store)) {
+        ok = fail(editor, "Could not keep a copy of the damaged Favorite folders; nothing was "
+                          "changed.");
         goto cleanup;
     }
     ok = mainui_favorite_store_commit(&store, fresh);

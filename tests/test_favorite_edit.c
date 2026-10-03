@@ -29,8 +29,28 @@ static void reopen(MainUILibrary *library, const char *sd)
     assert(mainui_library_open(library, sd, false));
 }
 
+/* fixture-favorite_edit SD create NAME: one Create at the root; 0 if saved. */
+static int create_once(const char *sd, const char *name)
+{
+    MainUILibrary *library = calloc(1, sizeof *library);
+    MainUIFavoriteEditor editor = {0};
+    assert(library && mainui_library_open(library, sd, false));
+    int row = 0;
+    bool ok = mainui_favorite_edit(&editor, library, sd, CONTEXT_FAVORITE_CREATE, name, &row);
+    if (!ok) {
+        puts(editor.error);
+    }
+    mainui_favorite_editor_close(&editor);
+    mainui_library_close(library);
+    free(library);
+    return ok ? 0 : 1;
+}
+
 int main(int argc, char **argv)
 {
+    if (argc == 4 && !strcmp(argv[2], "create")) {
+        return create_once(argv[1], argv[3]);
+    }
     assert(argc == 2);
     MainUILibrary *library = calloc(1, sizeof *library);
     MainUIFavoriteEditor editor = {0};

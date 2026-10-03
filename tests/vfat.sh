@@ -15,4 +15,4 @@ truncate -s 128M "$work/card.img"
 mkfs.vfat "$work/card.img"
 sudo -n mount -o "loop,uid=$(id -u),gid=$(id -g)" "$work/card.img" "$work/mount"
 mounted=1
-MAINUI_FAT_ROOT="$work/mount" MAINUI_FAT_IMAGE="$work/card.img"     python3 tests/integration/run.py --build-dir "$build" fat_delete
+MAINUI_FAT_ROOT="$work/mount" MAINUI_FAT_IMAGE="$work/card.img"     python3 tests/integration/run.py --build-dir "$build" fat_delete favorite_edit

@@ -207,7 +207,7 @@ $(O)/no-hardlinks.so: tests/no_hardlinks.c
 	$(CC) $(STD) $(WARN) -shared -fPIC $< -o $@
 
 check-no-hardlinks: $(HOST_BIN) $(O)/no-hardlinks.so
-	LD_PRELOAD='$(abspath $(O)/no-hardlinks.so)' ONION_ROOT='$(ONION_ROOT)' $(PYTHON) tests/integration/run.py --build-dir $(O) fat_delete persistence
+	LD_PRELOAD='$(abspath $(O)/no-hardlinks.so)' ONION_ROOT='$(ONION_ROOT)' $(PYTHON) tests/integration/run.py --build-dir $(O) fat_delete persistence favorite_edit
 
 check-vfat: $(HOST_BIN) $(O)/no-hardlinks.so
 	sh tests/vfat.sh $(O)
