@@ -10,7 +10,9 @@ crash cannot take the runner down, and so a case can still be run directly:
     python3 tests/integration/case_cache.py
 
 Cases that need the Onion reference tree report themselves as skipped when it
-is absent, which keeps a plain checkout usable.
+is absent, which keeps a plain checkout usable. MAINUI_ALLOWED_SKIPS, a list of
+case names separated by spaces or commas, turns any other skip into a failure;
+CI sets it so a newly skipping case cannot pass unnoticed.
 """
 import argparse
 import os
@@ -50,6 +52,8 @@ def main():
     environment.setdefault("SDL_VIDEODRIVER", "dummy")
     environment.setdefault("SDL_AUDIODRIVER", "dummy")
 
+    allowed = os.environ.get("MAINUI_ALLOWED_SKIPS")
+    allowed = None if allowed is None else set(allowed.replace(",", " ").split())
     failures, skipped = [], []
     width = max(len(name) for name in selected)
     for name in selected:
@@ -69,7 +73,10 @@ def main():
         if "Skip:" in output and result.returncode == 0:
             reason = next(line for line in output.splitlines() if "Skip:" in line)
             print(f"skip  ({reason.split('Skip:', 1)[1].strip()})")
-            skipped.append(name)
+            if allowed is not None and name not in allowed:
+                failures.append((name, f"unexpected skip (not in MAINUI_ALLOWED_SKIPS): {reason}"))
+            else:
+                skipped.append(name)
         elif result.returncode == 0:
             print(f"ok   {elapsed:5.1f}s")
         else:

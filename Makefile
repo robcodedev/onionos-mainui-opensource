@@ -6,6 +6,7 @@
 #   make check        build and run the whole test suite
 #   make device       cross-compile the device launcher (build/onion/MainUI)
 #   make check-device cross-compile the self-contained suites for the device
+#   make check-asan   the host suites under ASan and UBSan, in build/asan
 #   make format       clang-format every project source in place
 #   make clean
 #
@@ -140,6 +141,20 @@ $(O)/persistence-probe: $(O)/fault/tests/persistence_probe.o $(O)/libmainui-faul
 
 $(O)/fixture-%: $(O)/obj/tests/test_%.o $(O)/libmainui.a
 	$(CC) $^ -o $@ $(LDFLAGS) $(LDLIBS)
+
+# ---------------------------------------------------------------- sanitizers
+
+# The whole host suite with AddressSanitizer and UndefinedBehaviorSanitizer,
+# built in its own tree so it never mixes with ordinary objects.
+SANITIZE ?= -fsanitize=address,undefined -fno-sanitize-recover=undefined \
+            -fno-omit-frame-pointer
+
+.PHONY: check-asan
+check-asan:
+	@ASAN_OPTIONS=$${ASAN_OPTIONS:-detect_leaks=1:abort_on_error=1} \
+	UBSAN_OPTIONS=$${UBSAN_OPTIONS:-print_stacktrace=1:halt_on_error=1} \
+	$(MAKE) --no-print-directory O=$(O)/asan OPT='-O1 -g $(SANITIZE)' \
+	    LDFLAGS='$(SANITIZE)' check
 
 # ---------------------------------------------------------------- device
 
