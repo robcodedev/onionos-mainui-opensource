@@ -504,12 +504,19 @@ bool mainui_favorite_edit(MainUIFavoriteEditor *editor, MainUILibrary *library, 
             ok = true;
             goto cleanup;
         }
-        ok = moving != INT_MIN && reorder(fresh, moving, row, false);
+        /* A game pasted on a folder goes into it, after its games; the
+         * cursor stays on the folder. Pasted anywhere else (a folder on a
+         * folder, or on "..") it takes that place in the open folder. */
+        bool into = moving >= 0 && row != INT_MIN && row < 0;
+        if (into) {
+            fresh->current = -row - 1;
+        }
+        ok = moving != INT_MIN && reorder(fresh, moving, into ? INT_MIN : row, false);
         if (ok) {
-            affected = copy(editor->key);
+            affected = copy(into ? fresh->folders[-row - 1].id : editor->key);
             ok = affected != NULL;
-            selected_folder = editor->folder;
-            type = editor->type;
+            selected_folder = into || editor->folder;
+            type = into ? 0 : editor->type;
         }
     }
     else {

@@ -38,6 +38,7 @@
 
 * MainUI no longer checks its files every few seconds while a screen is open. Opening Games, Expert, Apps, Favorites or Recents reads it again instead, keeping the selected console, so changes made outside MainUI (over Wi-Fi, for example) show up there. A console whose configuration could not be read, for example while it was being copied, is found the next time Games or Expert is opened; before, it stayed missing from Games until a restart.
 * Moving a Favorite (Move, then Paste) keeps the list where it is when the Favorite stays on screen, and otherwise scrolls only as far as needed. Before, the list jumped so the Favorite was on the bottom row. Pasting into an empty or short folder also keeps its ".." row in view.
+* A game pasted on a Favorites folder goes into that folder, after its games, and the cursor stays on the folder. Before, it stayed in the open folder, above its other games. A folder pasted on a folder still takes its place.
 * Creating the first folder in an empty Favorites folder keeps its ".." row in view.
 * Editing inside a Favorites folder (Create, Rename, Sort, Delete, removing a Favorite) no longer forgets your place in the folders above it: Back returns to the row and window you entered from.
 * When Favorites folders were reordered while a game ran, Back after the return selects the folder you came from, not whichever folder took its old row.

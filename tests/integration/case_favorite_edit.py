@@ -389,3 +389,46 @@ folder_case("paste-into-empty-folder", 0, 0)
 folder_case("paste-into-long-folder", 10, 2)
 folder_case("paste-into-long-folder-end", 10, 9)
 print("Paste keeps the list window unless the moved Favorite leaves it")
+
+
+# A game pasted on a folder goes into it, after its games; the cursor stays on
+# the folder and the list does not move. A folder pasted on a folder still
+# takes its place instead, and paste on ".." stays in the open folder (above).
+def inside_keys(sd, folder="f"):
+    rows = [json.loads(line) for line in
+            (sd / "Roms/favourite-folders.json").read_text().splitlines()]
+    return [row["key"] for row in sorted((row for row in rows if row.get("folder") == folder),
+                                         key=lambda row: row["order"])]
+
+for name, inside in (("drop-into-empty-folder", 0), ("drop-into-long-folder", 10)):
+    sd = folder_fixture(name, inside)
+    # Move the last root game, Down wraps to Folder, Paste on it.
+    dropped = capture(sd, name, "EDDDSE" + "D" + "SE")
+    keys = inside_keys(sd)
+    assert len(keys) == inside + 1 and keys[-1] == "/mnt/SDCARD/Roms/FC/02.nes", (name, keys)
+    assert keys[:-1] == [f"/mnt/SDCARD/Roms/FC/{i:02}.nes" for i in range(3, 3 + inside)]
+    assert capture(sd, name + "-reopened", "E") == dropped, name
+    # Opening it in the same session shows the game as its last row.
+    sd = folder_fixture(name + "-open", inside)
+    opened = capture(sd, name + "-open", "EDDDSEDSE" + "E" + "U")
+    assert capture(sd, name + "-open-navigated", "EE" + "U") == opened, name
+
+# A game already in that folder, dropped on it from the parent, goes last.
+sd = folder_fixture("drop-own-folder", 3)
+capture(sd, "drop-own-folder", "EE" + "D" + "SE" + "B" + "SE")
+assert inside_keys(sd) == [f"/mnt/SDCARD/Roms/FC/{i:02}.nes" for i in (4, 5, 3)], inside_keys(sd)
+
+# A folder pasted on a folder takes its place; nothing goes inside.
+sd = fixture("folder-on-folder")
+write_lines(sd / "Roms/favourite.json",
+            [dict(label="Game", rompath="/mnt/SDCARD/Roms/FC/00.nes", type=5)])
+write_lines(sd / "Roms/favourite-folders.json",
+            [dict(schema=1, generation=0),
+             dict(kind="folder", id="a", parent="", name="A", order=0),
+             dict(kind="folder", id="b", parent="", name="B", order=1)])
+capture(sd, "folder-on-folder", "E" + "D" + "SE" + "U" + "SE")
+rows = {row["id"]: row for row in map(json.loads,
+        (sd / "Roms/favourite-folders.json").read_text().splitlines()) if "id" in row}
+assert rows["a"]["parent"] == rows["b"]["parent"] == "", rows
+assert rows["b"]["order"] < rows["a"]["order"], rows
+print("A game pasted on a folder goes into it, last; a folder pasted on one takes its place")

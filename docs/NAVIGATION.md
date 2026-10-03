@@ -35,6 +35,8 @@ Edits change the list under the window: Create, Rename, Sort, Delete, Move and P
 - **No gap is left at the bottom.** When a removal shortens a long list, the rows above move into view rather than leaving an empty row under the last one.
 - **A short list keeps its top row.** In a folder, the `..` row stays in view, also after pasting or creating the first entry there.
 
+Paste puts the moved Favorite where the cursor is: in place of the selected row, or at the end of the open folder on "..". A game pasted on a folder goes into that folder instead, after its games, and the cursor stays on the folder. A folder pasted on a folder takes that folder's place; to put it inside, open the folder and paste there.
+
 Folders remember where you were. Back returns to the row and window you entered the folder from, also after editing inside it, at any depth. The remembered place of a folder you have visited survives edits elsewhere, and is dropped only when that folder is removed.
 
 This also holds when the folders were reordered outside MainUI while a game ran: Back selects the folder you came from at its new row.

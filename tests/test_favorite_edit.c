@@ -113,10 +113,29 @@ int main(int argc, char **argv)
     assert(mainui_favorite_edit(&editor, library, argv[1], CONTEXT_FAVORITE_MOVE, NULL, &row));
     assert(mainui_favorite_is_cut(&editor, library, row));
     assert(mainui_library_enter(library, selected(library, "Container")));
-    row = selected(library, "Nested");
+    row = 0; /* "..": pasted in the open folder */
     assert(mainui_favorite_edit(&editor, library, argv[1], CONTEXT_FAVORITE_PASTE, NULL, &row));
     assert(!editor.key && !strcmp(mainui_library_label(library, row), "Zebra"));
     assert(library->items[library->visible[row]].folder == library->current);
+    /* A game pasted on a folder goes into it, after its games, and the cursor
+     * stays on the folder. Moved back via ".." for the steps below. */
+    assert(mainui_favorite_edit(&editor, library, argv[1], CONTEXT_FAVORITE_MOVE, NULL, &row));
+    row = selected(library, "Nested");
+    int nested = row;
+    assert(mainui_favorite_edit(&editor, library, argv[1], CONTEXT_FAVORITE_PASTE, NULL, &row));
+    assert(!editor.key && row == nested && !strcmp(mainui_library_label(library, row), "Nested"));
+    for (int i = 0; i < library->visible_count; i++) {
+        assert(strcmp(mainui_library_label(library, i), "Zebra"));
+    }
+    assert(mainui_library_enter(library, row));
+    row = library->visible_count - 1;
+    assert(!strcmp(mainui_library_label(library, row), "Zebra"));
+    assert(library->items[library->visible[row]].folder == library->current);
+    assert(mainui_favorite_edit(&editor, library, argv[1], CONTEXT_FAVORITE_MOVE, NULL, &row));
+    assert(mainui_library_back(library));
+    row = 0;
+    assert(mainui_favorite_edit(&editor, library, argv[1], CONTEXT_FAVORITE_PASTE, NULL, &row));
+    assert(!strcmp(mainui_library_label(library, row), "Zebra"));
     reopen(library, argv[1]);
     assert(mainui_library_enter(library, selected(library, "Container")));
     row = selected(library, "Zebra");
