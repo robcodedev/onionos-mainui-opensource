@@ -16,8 +16,12 @@ LOGS = SD / ".tmp_update/logs"
 (SD / ".tmp_update/config").mkdir(parents=True)
 (SD / "miyoo/app").mkdir(parents=True)
 wrapper = OUT / "wrapper.sh"
-wrapper.write_text((ROOT / "device/MainUI-test-wrapper.sh").read_text()
-                   .replace("/mnt/SDCARD", str(SD)).replace("/tmp", str(OUT)))
+# Map only the wrapper's own --handoff-dir /tmp, before the SD path goes in:
+# a build directory under /tmp must not be rewritten a second time.
+source = (ROOT / "device/MainUI-test-wrapper.sh").read_text()
+assert source.count("--handoff-dir /tmp ") == 3, "update this case with the wrapper"
+wrapper.write_text(source.replace("--handoff-dir /tmp ", f"--handoff-dir {OUT} ")
+                   .replace("/mnt/SDCARD", str(SD)))
 marker = OUT / "ran"
 
 
