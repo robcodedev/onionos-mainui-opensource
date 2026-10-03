@@ -210,6 +210,26 @@ before = favourites.read_bytes()
 assert fixture_out("add-favorite", json.dumps(dict(stock, rompath="/mnt/SDCARD/Roms/FC/same.nes"))).returncode == 0
 assert favourites.read_bytes() == before
 assert fixture_out("is-favorite", "/mnt/SDCARD/Roms/FC/other.nes").stdout.strip() == "no"
+# The same game under another label, as a stale Add popup or missing markers
+# would offer it, from either route and launcher: nothing is added and the
+# file is not rewritten (audit A3). Aliases already listed stay as they are.
+alias = dict(stock, label="Alias")
+favourites.write_text(json.dumps(stock) + "\n" + json.dumps(alias) + "\n", encoding="utf-8")
+before = favourites.read_bytes()
+for added in (dict(stock, label="Other label", rompath="/mnt/SDCARD/Roms/FC/same.nes"),
+              dict(stock, label="Searched", launch="/mnt/SDCARD/App/Search/launch.sh",
+                   rompath="/mnt/SDCARD/Emu/FC/launch.sh:/mnt/SDCARD/Roms//FC/./same.nes"),
+              dict(stock, label="Other emulator", launch="/mnt/SDCARD/Emu/FC2/launch.sh")):
+    assert fixture_out("add-favorite", json.dumps(added)).returncode == 0, added
+    assert favourites.read_bytes() == before, added
+# A different game is still added; an App (no ROM) still goes by its label.
+app = dict(label="Some App", rompath="", launch="/mnt/SDCARD/App/X/launch.sh", type=3)
+for added in (dict(stock, label="Other", rompath="/mnt/SDCARD/Roms/FC/other.nes"), app,
+              dict(app, label="Another App")):
+    assert fixture_out("add-favorite", json.dumps(added)).returncode == 0, added
+assert len(favourites.read_text().splitlines()) == 5
+assert fixture_out("add-favorite", json.dumps(app)).returncode == 0
+assert len(favourites.read_text().splitlines()) == 5
 favourites.unlink()
 
 # One launch, two routes: the console list records the stock spelling, Search

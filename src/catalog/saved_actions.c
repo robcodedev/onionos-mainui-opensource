@@ -139,9 +139,13 @@ bool mainui_saved_action_locked(const char *sd, bool recent, MainUISavedAction a
         if (*start && (!cJSON_IsObject(item) || (++count > 10000 && action == SAVED_ADD))) {
             ok = false;
         }
+        /* Patched duplicate-label guard covers Apps as well as ROMs. A game
+         * already listed under another label is a Favorite too, as its menu
+         * shows: adding it again changes nothing, and its rows stay as they are. */
         if (item && action == SAVED_ADD &&
-            !strcmp(string(item, "label"), string(record, "label"))) {
-            found = true; /* Patched duplicate-label guard covers Apps as well as ROMs. */
+            (!strcmp(string(item, "label"), string(record, "label")) ||
+             (*real_rom(record) && mainui_same_rom(real_rom(item), real_rom(record))))) {
+            found = true;
         }
         if (item && action == SAVED_REMOVE && !found &&
             (recent        ? mainui_recent_same(item, record)
