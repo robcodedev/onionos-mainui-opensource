@@ -1082,6 +1082,10 @@ static void dispatch_key(MainUIApp *ui, SDL_Event *event)
         .home = &ui->home_view,
         .search = ui->search.results ? &ui->search : NULL,
         .home_only = ui->home && !ui->settings_open && !ui->apps};
+    /* A message is drawn over Details, so it takes the keys first. */
+    if (ui->details.open && screen_message_key(ui, key)) {
+        return;
+    }
     if (ui->details.open && key == SDLK_RETURN && ui->handoff_dir) {
         ui->launch_pending =
             mainui_session_launch(ui->handoff_dir, &ui->launch_source, NULL, ui->message_body);

@@ -182,6 +182,29 @@ static void held_confirmation(MainUIApp *ui)
     assert(ui->confirmation == -1 && !ui->return_latched);
 }
 
+/* A message drawn over Details takes the keys first: A or Back dismisses
+ * it, nothing reaches Details, and A held on goes no further (F3). */
+static void message_over_details(MainUIApp *ui)
+{
+    reset(ui);
+    ui->home = false;
+    ui->details.open = true;
+    ui->handoff_dir = "/nonexistent/mainui-handoff";
+    strcpy(ui->message_title, "Catalog unavailable");
+    assert(key_event(ui, SDL_KEYDOWN, SDLK_DOWN, 0));
+    assert(*ui->message_title && ui->details.open && ui->view.selected == 1);
+    assert(key_event(ui, SDL_KEYDOWN, SDLK_RETURN, 0));
+    assert(!*ui->message_title && ui->details.open && !ui->launch_pending);
+    assert(key_event(ui, SDL_KEYDOWN, SDLK_RETURN, 0)); /* held: no launch */
+    assert(!*ui->message_title && ui->details.open && !ui->launch_pending);
+    assert(key_event(ui, SDL_KEYUP, SDLK_RETURN, 0));
+    strcpy(ui->message_title, "Catalog unavailable");
+    assert(key_event(ui, SDL_KEYDOWN, SDLK_ESCAPE, 0));
+    assert(!*ui->message_title && ui->details.open);
+    ui->details.open = false;
+    ui->handoff_dir = NULL;
+}
+
 static void releases_and_focus(MainUIApp *ui)
 {
     reset(ui);
@@ -457,6 +480,7 @@ int mainui_suite_screen_events(void)
     start_is_consumed(ui);
     keyboard_priority(ui);
     held_confirmation(ui);
+    message_over_details(ui);
     releases_and_focus(ui);
     free(ui);
     return 0;
