@@ -157,6 +157,12 @@ void mainui_stock_settings_load(MainUIStockSettings *settings, const char *direc
     for (int i = 0; i < 3; i++) {
         const cJSON *value = cJSON_GetObjectItemCaseSensitive(system, names[i]);
         int number = cJSON_IsNumber(value) ? value->valueint : defaults[i];
+        /* keymon's live value is the one in effect, also when a failed save
+         * could not put it back; the file's is the fallback. */
+        int live = 0;
+        if (mainui_system_live_value(sd, names[i], &live) && live >= 0 && live <= maximum[i]) {
+            number = live;
+        }
         if (number < 0 || number > maximum[i]) {
             number = defaults[i];
         }
@@ -168,10 +174,11 @@ void mainui_stock_settings_load(MainUIStockSettings *settings, const char *direc
     cJSON_Delete(system);
 }
 
-bool mainui_stock_setting_adjust(MainUIStockSettings *settings, const char *sd, int delta)
+MainUISettingsResult mainui_stock_setting_adjust(MainUIStockSettings *settings, const char *sd,
+                                                 int delta)
 {
     if (settings->selected < 0 || settings->selected >= settings->count) {
-        return false;
+        return MAINUI_SETTINGS_NOT_SAVED;
     }
     MainUISettingKind kind = settings->rows[settings->selected];
     const char *key = kind == SET_BRIGHTNESS ? "brightness"
@@ -179,7 +186,7 @@ bool mainui_stock_setting_adjust(MainUIStockSettings *settings, const char *sd, 
                       : kind == SET_SLEEP    ? "hibernate"
                                              : NULL;
     if (!key) {
-        return false;
+        return MAINUI_SETTINGS_NOT_SAVED;
     }
     int maximum = kind == SET_BRIGHTNESS ? 10 : kind == SET_SOUND ? 20 : 30;
     int value = settings->values[kind] + (delta < 0 ? -1 : 1);
@@ -201,13 +208,18 @@ bool mainui_stock_setting_adjust(MainUIStockSettings *settings, const char *sd, 
         value = maximum;
     }
     if (value == settings->values[kind]) {
-        return true;
+        return MAINUI_SETTINGS_SAVED;
     }
     cJSON *number = cJSON_CreateNumber(value);
-    bool ok = number && mainui_system_write(sd, key, number);
+    MainUISettingsResult result =
+        number ? mainui_system_write_result(sd, key, number) : MAINUI_SETTINGS_NOT_SAVED;
     cJSON_Delete(number);
-    if (ok) {
+    int live = 0;
+    if (result == MAINUI_SETTINGS_SAVED) {
         settings->values[kind] = value;
     }
-    return ok;
+    else if (result == MAINUI_SETTINGS_PARTLY && mainui_system_live_value(sd, key, &live)) {
+        settings->values[kind] = live; /* show and apply what is in effect */
+    }
+    return result;
 }

@@ -115,7 +115,9 @@ bool mainui_screen_settings_open(MainUIApp *ui, SDLKey key)
              (ui->settings.rows[ui->settings.selected] == SET_BRIGHTNESS ||
               ui->settings.rows[ui->settings.selected] == SET_SOUND ||
               ui->settings.rows[ui->settings.selected] == SET_SLEEP)) {
-        if (!mainui_stock_setting_adjust(&ui->settings, ui->sd, key == SDLK_LEFT ? -1 : 1)) {
+        MainUISettingsResult saved =
+            mainui_stock_setting_adjust(&ui->settings, ui->sd, key == SDLK_LEFT ? -1 : 1);
+        if (saved != MAINUI_SETTINGS_SAVED) {
             /* A damaged file is explained once per session, not on every press. */
             bool damaged = mainui_system_damaged(ui->sd);
             if (!damaged || !ui->system_damage_reported) {
@@ -123,7 +125,10 @@ bool mainui_screen_settings_open(MainUIApp *ui, SDLKey key)
                 snprintf(ui->message_body, 256, "%s",
                          damaged ? "system.json is damaged, so settings are not saved. "
                                    "Repair it on a computer."
-                                 : "Could not save system.json.");
+                         : saved == MAINUI_SETTINGS_PARTLY
+                             ? "Could not save system.json, and the change could not be "
+                               "fully undone."
+                             : "Could not save system.json.");
             }
             else {
                 fprintf(stderr, "Setting not saved: system.json is damaged\n");

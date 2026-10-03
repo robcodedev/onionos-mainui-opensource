@@ -2,6 +2,7 @@
 """Verify host button inputs, app discovery, and Settings rows."""
 import json
 import os
+import shutil
 import stat
 from pathlib import Path
 import subprocess
@@ -66,6 +67,10 @@ subprocess.run([str(BUILD / "fixture-stock_settings"),str(CONFIG),str(DUPLICATES
 DAMAGED = OUT/'damaged-sd'
 DAMAGED.mkdir(exist_ok=True)
 subprocess.run([str(BUILD / "fixture-stock_settings"),str(CONFIG),str(DAMAGED),'damaged'],cwd=ROOT,check=True,timeout=20)
+MONITOR = OUT/'monitor-sd'
+shutil.rmtree(OUT/'monitor-sd.away', ignore_errors=True)  # left by an interrupted run
+MONITOR.mkdir(exist_ok=True)
+subprocess.run([str(BUILD / "fixture-stock_settings"),str(CONFIG),str(MONITOR),'monitor'],cwd=ROOT,check=True,timeout=20)
 assert settings != capture('settings-whitelist','RRE')
 print('Desktop checks passed: mapped buttons, Apps list, stock Settings navigation/whitelist, no invented settings writes')
 

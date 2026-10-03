@@ -40,6 +40,8 @@ bool mainui_device_power_off(const MainUIDeviceAdapter *);
 /* Apply the Onion backlight curve, or write a simulated duty_cycle for tests. */
 /* Update the stock keymon shared-memory value before notifying its reader. */
 bool mainui_device_setting_sync(const MainUIDeviceAdapter *, const char *key, int value);
+/* keymon's current value of `key`; false when it keeps none or is unavailable. */
+bool mainui_device_setting_value(const MainUIDeviceAdapter *, const char *key, int *value);
 bool mainui_device_brightness(const MainUIDeviceAdapter *, int value);
 /* Preferences are consumed by keymon; there is no guessed direct suspend IPC. */
 bool mainui_device_settings_changed(const MainUIDeviceAdapter *);

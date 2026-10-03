@@ -647,38 +647,71 @@ bool mainui_device_power_off(const MainUIDeviceAdapter *adapter)
     return (id == 283 || id == 285 || id == 354) && mainui_device_shutdown(adapter->runtime);
 }
 
+#ifdef MAINUI_ONION
+/* Onion settings_sync.h: keymon reads these on every MainUI input and writes
+ * changed values back to system.json. Updating only the file loses. NULL when
+ * `key` is not one of them; *info is NULL when the memory is unavailable. */
+static const MonitorValue *monitor_slot(const char *key, KeyShmInfo **info)
+{
+    static const char *const keys[] = {"vol", "brightness", "bgmvol",   "hibernate", "lumination",
+                                       "hue", "saturation", "contrast", "audiofix"};
+    static const MonitorValue slots[] = {
+        MONITOR_VOLUME,          MONITOR_BRIGHTNESS, MONITOR_BGM_VOLUME,
+        MONITOR_HIBERNATE_DELAY, MONITOR_LUMINATION, MONITOR_HUE,
+        MONITOR_SATURATION,      MONITOR_CONTRAST,   MONITOR_AUDIOFIX};
+    static KeyShmInfo shared = {.id = -1, .addr = NULL};
+    for (size_t i = 0; i < sizeof slots / sizeof *slots; ++i) {
+        if (!strcmp(key, keys[i])) {
+            if (!shared.addr || shared.addr == (void *)-1) {
+                InitKeyShm(&shared);
+            }
+            *info = !shared.addr || shared.addr == (void *)-1 ? NULL : &shared;
+            return &slots[i];
+        }
+    }
+    return NULL;
+}
+#endif
+
 bool mainui_device_setting_sync(const MainUIDeviceAdapter *adapter, const char *key, int value)
 {
     if (adapter->backend == DEVICE_SIMULATED) {
         return true;
     }
 #ifdef MAINUI_ONION
-    /* Onion settings_sync.h: keymon reads these on every MainUI input and
-     * writes changed values back to system.json. Updating only the file loses. */
-    const char *keys[] = {"vol", "brightness", "bgmvol",   "hibernate", "lumination",
-                          "hue", "saturation", "contrast", "audiofix"};
-    const MonitorValue slots[] = {MONITOR_VOLUME,          MONITOR_BRIGHTNESS, MONITOR_BGM_VOLUME,
-                                  MONITOR_HIBERNATE_DELAY, MONITOR_LUMINATION, MONITOR_HUE,
-                                  MONITOR_SATURATION,      MONITOR_CONTRAST,   MONITOR_AUDIOFIX};
-    for (size_t i = 0; i < sizeof slots / sizeof *slots; ++i) {
-        if (!strcmp(key, keys[i])) {
-            static KeyShmInfo info = {.id = -1, .addr = NULL};
-            if (!info.addr || info.addr == (void *)-1) {
-                InitKeyShm(&info);
-            }
-            if (!info.addr || info.addr == (void *)-1) {
-                return false;
-            }
-            SetKeyShm(&info, slots[i], value);
-            bool ok = GetKeyShm(&info, slots[i]) == value;
-            return ok;
+    KeyShmInfo *info = NULL;
+    const MonitorValue *slot = monitor_slot(key, &info);
+    if (slot) {
+        if (!info) {
+            return false;
         }
+        SetKeyShm(info, *slot, value);
+        return GetKeyShm(info, *slot) == value;
     }
 #else
     (void)key;
     (void)value;
 #endif
     return true;
+}
+
+bool mainui_device_setting_value(const MainUIDeviceAdapter *adapter, const char *key, int *value)
+{
+    if (adapter->backend == DEVICE_SIMULATED) {
+        return false;
+    }
+#ifdef MAINUI_ONION
+    KeyShmInfo *info = NULL;
+    const MonitorValue *slot = monitor_slot(key, &info);
+    if (slot && info) {
+        *value = GetKeyShm(info, *slot);
+        return true;
+    }
+#else
+    (void)key;
+    (void)value;
+#endif
+    return false;
 }
 
 bool mainui_device_brightness(const MainUIDeviceAdapter *adapter, int value)

@@ -98,6 +98,11 @@ void mainui_settings_page_open(MainUISettingsPage *page, MainUISettingKind kind,
                               ? value->valueint
                           : i ? 10
                               : 7;
+        /* keymon's live value is the one in effect; see stock settings. */
+        int live = 0;
+        if (mainui_system_live_value(sd, display_keys[i], &live) && live >= 0 && live <= 20) {
+            page->values[i] = live;
+        }
     }
     const cJSON *wifi = cJSON_GetObjectItemCaseSensitive(root, "wifi");
     page->wifi = cJSON_IsNumber(wifi) && wifi->valuedouble == 1;
@@ -326,6 +331,8 @@ int mainui_settings_page_key(MainUISettingsPage *page, SDLKey key, const char *s
         }
     }
     if (page->kind == SET_DISPLAY) {
+        int before[4];
+        memcpy(before, page->values, sizeof before);
         if (key == SDLK_LEFT || key == SDLK_RIGHT) {
             int *value = &page->values[page->selected];
             *value += key == SDLK_LEFT ? -1 : 1;
@@ -342,12 +349,23 @@ int mainui_settings_page_key(MainUISettingsPage *page, SDLKey key, const char *s
             for (int i = 0; ok && i < 4; i++) {
                 ok = cJSON_AddNumberToObject(values, display_keys[i], page->values[i]) != NULL;
             }
-            ok = ok && mainui_system_patch(sd, values);
+            MainUISettingsResult result =
+                ok ? mainui_system_patch_result(sd, values) : MAINUI_SETTINGS_NOT_SAVED;
+            ok = result == MAINUI_SETTINGS_SAVED;
             cJSON_Delete(values);
+            /* Not saved: show the values in effect, not the ones asked for. */
+            for (int i = 0; !ok && i < 4; i++) {
+                if (result != MAINUI_SETTINGS_PARTLY ||
+                    !mainui_system_live_value(sd, display_keys[i], &page->values[i])) {
+                    page->values[i] = before[i];
+                }
+            }
             bool applied = ok && apply_display(page);
             snprintf(page->message, sizeof page->message, "%s",
                      !ok && mainui_system_damaged(sd)
                          ? "system.json is damaged, so settings are not saved."
+                     : result == MAINUI_SETTINGS_PARTLY
+                         ? "Could not save system.json, and the change could not be fully undone."
                      : !ok     ? "Could not save system.json."
                      : applied ? ""
                                : mainui_translate(

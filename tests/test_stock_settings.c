@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "app/render.h"
 #include "app/screen_events.h"
+#include "app/settings_page.h"
 #include "menus/stock_settings.h"
 #include "platform/audio.h"
 #include "platform/system_config.h"
@@ -161,6 +162,159 @@ static int sounds(const char *sd)
     return 0;
 }
 
+/* A fake of keymon's live copy, which can fail a write, make the file
+ * publication fail (by moving the SD folder away) or change a value as
+ * keymon would. */
+/* A fake of keymon's live copy. A write to `fail` changes nothing and fails,
+ * after `fail_after` writes that work; one may change another value as keymon
+ * would. Moving the SD folder away makes the file publication fail. */
+static struct {
+    const char *keys[4];
+    int values[4];
+    const char *fail, *move_away, *external_key;
+    int fail_after, external_value;
+    bool moved;
+    char sd[4096], away[4200];
+} fake = {.keys = {"brightness", "lumination", "hue", "contrast"}};
+
+static int fake_slot(const char *key)
+{
+    for (int i = 0; i < 4; i++) {
+        if (!strcmp(key, fake.keys[i])) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static bool fake_get(void *context, const char *key, int *value)
+{
+    (void)context;
+    int slot = fake_slot(key);
+    if (slot >= 0) {
+        *value = fake.values[slot];
+    }
+    return slot >= 0;
+}
+
+static bool fake_set(void *context, const char *key, int value)
+{
+    (void)context;
+    int slot = fake_slot(key);
+    if (slot < 0) {
+        return true;
+    }
+    if (fake.fail && !strcmp(key, fake.fail) && fake.fail_after-- <= 0) {
+        if (fake.external_key) {
+            fake.values[fake_slot(fake.external_key)] = fake.external_value;
+            fake.external_key = NULL; /* once */
+        }
+        return false;
+    }
+    fake.values[slot] = value;
+    if (fake.move_away && !fake.moved && !strcmp(key, fake.move_away)) {
+        assert(!rename(fake.sd, fake.away));
+        fake.moved = true;
+    }
+    return true;
+}
+
+static void fake_back(void)
+{
+    if (fake.moved) {
+        assert(!rename(fake.away, fake.sd));
+    }
+    fake.fail = fake.move_away = fake.external_key = NULL;
+    fake.fail_after = 0;
+    fake.moved = false;
+}
+
+/* A save that fails after keymon's live values changed puts them back, so the
+ * live value, the file and the shown value agree again (interaction review
+ * F6). When one cannot be put back, or something else changed it, the save
+ * says so and Settings shows the value in effect (rebuild review C1). */
+static int monitor(const char *config, const char *sd)
+{
+    static const MainUISettingsMonitor live = {fake_get, fake_set, NULL};
+    mainui_system_set_monitor(&live);
+    snprintf(fake.sd, sizeof fake.sd, "%s", sd);
+    snprintf(fake.away, sizeof fake.away, "%s.away", sd);
+    char path[4200];
+    snprintf(path, sizeof path, "%s/system.json", sd);
+    FILE *file = fopen(path, "w");
+    assert(file);
+    fputs("{\"brightness\":7,\"lumination\":5,\"hue\":10,\"contrast\":10,\"other\":1}\n", file);
+    fclose(file);
+    memcpy(fake.values, (int[]){7, 5, 10, 10}, sizeof fake.values);
+    MainUIStockSettings settings = {.count = 1, .rows = {SET_BRIGHTNESS}};
+    settings.values[SET_BRIGHTNESS] = 7;
+
+    assert(mainui_stock_setting_adjust(&settings, sd, 1) == MAINUI_SETTINGS_SAVED);
+    assert(settings.values[SET_BRIGHTNESS] == 8 && fake.values[0] == 8 &&
+           saved(sd, "brightness") == 8 && saved(sd, "other") == 1);
+
+    fake.move_away = "brightness"; /* the file cannot be replaced */
+    assert(mainui_stock_setting_adjust(&settings, sd, 1) == MAINUI_SETTINGS_NOT_SAVED);
+    fake_back();
+    assert(settings.values[SET_BRIGHTNESS] == 8 && fake.values[0] == 8 &&
+           saved(sd, "brightness") == 8);
+
+    /* Nor can the live value be put back: Settings shows the 9 in effect. */
+    fake.move_away = fake.fail = "brightness";
+    fake.fail_after = 1;
+    assert(mainui_stock_setting_adjust(&settings, sd, 1) == MAINUI_SETTINGS_PARTLY);
+    fake_back();
+    assert(settings.values[SET_BRIGHTNESS] == 9 && fake.values[0] == 9 &&
+           saved(sd, "brightness") == 8);
+    /* Leaving and reopening Settings keeps showing the live 9 (review N3),
+     * and the next press starts from it and saves. */
+    MainUIStockSettings reopened = {0};
+    mainui_stock_settings_load(&reopened, config, sd, 0);
+    assert(reopened.values[SET_BRIGHTNESS] == 9);
+    for (int i = 0; i < reopened.count; i++) {
+        if (reopened.rows[i] == SET_BRIGHTNESS) {
+            reopened.selected = i;
+        }
+    }
+    assert(mainui_stock_setting_adjust(&reopened, sd, -1) == MAINUI_SETTINGS_SAVED);
+    assert(reopened.values[SET_BRIGHTNESS] == 8 && fake.values[0] == 8 &&
+           saved(sd, "brightness") == 8);
+    settings.values[SET_BRIGHTNESS] = 8;
+
+    /* Display: the third live value cannot be written; the two before it go
+     * back, so nothing changed. */
+    cJSON *display = cJSON_Parse("{\"lumination\":6,\"hue\":11,\"contrast\":12}");
+    fake.fail = "contrast";
+    assert(mainui_system_patch_result(sd, display) == MAINUI_SETTINGS_NOT_SAVED);
+    fake_back();
+    assert(fake.values[1] == 5 && fake.values[2] == 10 && fake.values[3] == 10);
+    assert(saved(sd, "lumination") == 5 && saved(sd, "contrast") == 10);
+    /* keymon changed hue meanwhile: that value stays, and the save says so. */
+    fake.fail = "contrast";
+    fake.external_key = "hue";
+    fake.external_value = 3;
+    assert(mainui_system_patch_result(sd, display) == MAINUI_SETTINGS_PARTLY);
+    fake_back();
+    assert(fake.values[1] == 5 && fake.values[2] == 3 && fake.values[3] == 10);
+    int value = 0;
+    assert(mainui_system_live_value(sd, "hue", &value) && value == 3);
+    /* Display opens with the live hue 3; saturation, not kept live, comes
+     * from the file. */
+    assert(saved(sd, "hue") == 10);
+    MainUISettingsPage page;
+    mainui_settings_page_open(&page, SET_DISPLAY, sd, NULL);
+    assert(page.values[1] == 3 && page.values[0] == 5 && page.values[3] == 10);
+    assert(!mainui_system_live_value(sd, "other", &value));
+    /* And a successful patch changes all of them. */
+    assert(mainui_system_patch_result(sd, display) == MAINUI_SETTINGS_SAVED);
+    assert(fake.values[1] == 6 && fake.values[2] == 11 && fake.values[3] == 12 &&
+           saved(sd, "hue") == 11);
+    cJSON_Delete(display);
+    mainui_system_set_monitor(NULL);
+    puts("A failed settings save puts keymon's live values back, or says it could not");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     assert(argc == 3 || argc == 4);
@@ -172,6 +326,9 @@ int main(int argc, char **argv)
     }
     if (argc == 4 && !strcmp(argv[3], "damaged")) {
         return damaged(argv[2]);
+    }
+    if (argc == 4 && !strcmp(argv[3], "monitor")) {
+        return monitor(argv[1], argv[2]);
     }
     MainUIStockSettings settings;
     mainui_stock_settings_load(&settings, argv[1], argv[2], 0);
