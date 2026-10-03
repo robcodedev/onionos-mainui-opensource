@@ -9,4 +9,8 @@
 cJSON *mainui_system_read(const char *sd);
 bool mainui_system_write(const char *sd, const char *key, const cJSON *value);
 bool mainui_system_patch(const char *sd, const cJSON *values);
+/* system.json exists but its content cannot be used (not a JSON object, NUL
+ * bytes, too large), as opposed to missing, blank or an I/O error. Nothing
+ * resets or rewrites it: it holds settings other programs share. */
+bool mainui_system_damaged(const char *sd);
 #endif

@@ -346,7 +346,9 @@ int mainui_settings_page_key(MainUISettingsPage *page, SDLKey key, const char *s
             cJSON_Delete(values);
             bool applied = ok && apply_display(page);
             snprintf(page->message, sizeof page->message, "%s",
-                     !ok       ? "Could not save system.json."
+                     !ok && mainui_system_damaged(sd)
+                         ? "system.json is damaged, so settings are not saved."
+                     : !ok     ? "Could not save system.json."
                      : applied ? ""
                                : mainui_translate(
                                      123, "Display settings saved. Reboot the device to apply."));

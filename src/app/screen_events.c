@@ -8,6 +8,7 @@
 #include "platform/device_request.h"
 #include "platform/input.h"
 #include "platform/launch.h"
+#include "platform/system_config.h"
 #include "platform/timing.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -115,8 +116,19 @@ bool mainui_screen_settings_open(MainUIApp *ui, SDLKey key)
               ui->settings.rows[ui->settings.selected] == SET_SOUND ||
               ui->settings.rows[ui->settings.selected] == SET_SLEEP)) {
         if (!mainui_stock_setting_adjust(&ui->settings, ui->sd, key == SDLK_LEFT ? -1 : 1)) {
-            snprintf(ui->message_title, 256, "Settings");
-            snprintf(ui->message_body, 256, "Could not save system.json.");
+            /* A damaged file is explained once per session, not on every press. */
+            bool damaged = mainui_system_damaged(ui->sd);
+            if (!damaged || !ui->system_damage_reported) {
+                snprintf(ui->message_title, 256, "Settings");
+                snprintf(ui->message_body, 256, "%s",
+                         damaged ? "system.json is damaged, so settings are not saved. "
+                                   "Repair it on a computer."
+                                 : "Could not save system.json.");
+            }
+            else {
+                fprintf(stderr, "Setting not saved: system.json is damaged\n");
+            }
+            ui->system_damage_reported |= damaged;
         }
         if (ui->device_enabled) {
             if (ui->settings.rows[ui->settings.selected] == SET_BRIGHTNESS &&

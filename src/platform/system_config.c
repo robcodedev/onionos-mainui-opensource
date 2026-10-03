@@ -80,6 +80,24 @@ static bool patch_unlocked(const char *sd, const cJSON *values)
     return ok;
 }
 
+bool mainui_system_damaged(const char *sd)
+{
+    char path[4096];
+    if (!path_for(path, sd, "")) {
+        return false;
+    }
+    char *text = mainui_read_text(path, 1024 * 1024);
+    if (!text) {
+        return errno == EINVAL || errno == EFBIG; /* NUL bytes, or too large */
+    }
+    bool blank = text[strspn(text, " \t\r\n")] == 0;
+    cJSON *root = blank ? NULL : cJSON_ParseWithOpts(text, NULL, true);
+    bool damaged = !blank && !cJSON_IsObject(root);
+    cJSON_Delete(root);
+    free(text);
+    return damaged;
+}
+
 bool mainui_system_write(const char *sd, const char *key, const cJSON *value)
 {
     cJSON *values = cJSON_CreateObject();

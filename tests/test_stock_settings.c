@@ -69,6 +69,39 @@ static int duplicates(const char *sd)
     return 0;
 }
 
+/* A damaged system.json is never rewritten; the reason is shown once. */
+static int damaged(const char *sd)
+{
+    char path[4096];
+    snprintf(path, sizeof path, "%s/system.json", sd);
+    const char *broken = "{\"brightness\":5,broken\n";
+    FILE *file = fopen(path, "wb");
+    assert(file && fputs(broken, file) >= 0);
+    assert(fclose(file) == 0);
+    assert(mainui_system_damaged(sd));
+    MainUIApp *ui = calloc(1, sizeof *ui);
+    assert(ui);
+    ui->running = ui->settings_open = true;
+    ui->confirmation = -1;
+    ui->sd = sd;
+    ui->settings.count = 1;
+    ui->settings.rows[0] = SET_BRIGHTNESS;
+    ui->settings.values[SET_BRIGHTNESS] = 5;
+    assert(mainui_screen_settings_open(ui, SDLK_RIGHT));
+    assert(strstr(ui->message_body, "damaged"));
+    ui->message_title[0] = ui->message_body[0] = 0;
+    assert(mainui_screen_settings_open(ui, SDLK_RIGHT));
+    assert(!*ui->message_title); /* not again in this session */
+    char text[64] = {0};
+    file = fopen(path, "rb");
+    assert(file && fread(text, 1, sizeof text - 1, file) > 0);
+    fclose(file);
+    assert(!strcmp(text, broken));
+    free(ui);
+    puts("A damaged system.json is reported once and left unchanged");
+    return 0;
+}
+
 /* Brightness, Menu sound and Sleep timer click on every Left/Right (#10). */
 static int sounds(const char *sd)
 {
@@ -136,6 +169,9 @@ int main(int argc, char **argv)
     }
     if (argc == 4 && !strcmp(argv[3], "duplicates")) {
         return duplicates(argv[2]);
+    }
+    if (argc == 4 && !strcmp(argv[3], "damaged")) {
+        return damaged(argv[2]);
     }
     MainUIStockSettings settings;
     mainui_stock_settings_load(&settings, argv[1], argv[2], 0);
