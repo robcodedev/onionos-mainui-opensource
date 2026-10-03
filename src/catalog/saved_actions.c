@@ -83,6 +83,11 @@ bool mainui_saved_action_locked(const char *sd, bool recent, MainUISavedAction a
     if (n < 0 || n >= (int)sizeof path) {
         return false;
     }
+    /* A confirmed clear needs nothing from the old list, so damaged content
+     * cannot block it. */
+    if (action == SAVED_CLEAR) {
+        return mainui_write_text_atomic(path, "");
+    }
     FILE *file = fopen(path, "rb");
     bool missing = !file && errno == ENOENT;
     if (!file && !missing) {
@@ -205,6 +210,25 @@ static bool recent_game(const cJSON *record)
            strcmp(string(record, "launch"), "setstate");
 }
 
+/* Keep a damaged list's bytes as <list>.damaged, once: a different earlier
+ * copy is not replaced. Needs the library lock (FAT has no hard links). */
+static bool keep_damaged(const char *path, const char *original)
+{
+    char copy[4096 + 16];
+    snprintf(copy, sizeof copy, "%s.damaged", path);
+    errno = 0;
+    char *existing = mainui_read_text(copy, 8u * 1024u * 1024u);
+    if (existing || errno != ENOENT) {
+        free(existing);
+        return true; /* an earlier original is already kept */
+    }
+    if (!mainui_write_bytes_new_locked(copy, original, strlen(original))) {
+        return false;
+    }
+    fprintf(stderr, "Recents had unreadable lines; the original is kept as %s\n", copy);
+    return true;
+}
+
 static bool recent_unlocked(const char *sd, const cJSON *record)
 {
     char path[4096];
@@ -229,6 +253,10 @@ static bool recent_unlocked(const char *sd, const cJSON *record)
     items[0] = cJSON_Duplicate(record, true);
     bool ok = items[0] != NULL;
     int count = 1, parsed = 0;
+    bool kept_original = false;
+    /* The loop splits `input` in place; keep the bytes for keep_damaged(). */
+    char *original = ok ? strdup(input) : NULL;
+    ok = original != NULL;
     for (char *line = input; ok && *line && parsed < 200 && count < 50;) {
         char *next = strchr(line, '\n');
         if (next) {
@@ -242,21 +270,31 @@ static bool recent_unlocked(const char *sd, const cJSON *record)
             cJSON *item = cJSON_ParseWithOpts(start, NULL, true);
             parsed++;
             if (!cJSON_IsObject(item)) {
+                /* Recents is history MainUI keeps, and the list already skips
+                 * this line. Keep the original once, then record the launch
+                 * without it rather than stop recording games. */
                 cJSON_Delete(item);
-                ok = false; /* Never overwrite a malformed user's list. */
-                break;
-            }
-            bool keep = recent_game(item);
-            for (int i = 0; keep && i < count; i++) {
-                if (mainui_recent_same(items[i], item)) {
-                    keep = false;
+                if (!kept_original) {
+                    ok = keep_damaged(path, original);
+                    kept_original = true;
+                }
+                if (!ok) {
+                    break;
                 }
             }
-            if (keep) {
-                items[count++] = item;
-            }
             else {
-                cJSON_Delete(item);
+                bool keep = recent_game(item);
+                for (int i = 0; keep && i < count; i++) {
+                    if (mainui_recent_same(items[i], item)) {
+                        keep = false;
+                    }
+                }
+                if (keep) {
+                    items[count++] = item;
+                }
+                else {
+                    cJSON_Delete(item);
+                }
             }
         }
         if (!next) {
@@ -288,6 +326,7 @@ static bool recent_unlocked(const char *sd, const cJSON *record)
     }
     free(output);
     free(input);
+    free(original);
     for (int i = 0; i < count; i++) {
         free(rows[i]);
         cJSON_Delete(items[i]);

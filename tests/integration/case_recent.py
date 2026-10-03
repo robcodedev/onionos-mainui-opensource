@@ -58,10 +58,13 @@ assert read() == [stock, game(91)]
 write([dict(game(i), type=3) for i in range(200)] + [game(999)])
 add(game(82))
 assert read() == [game(82)]
+# A damaged list no longer stops Recents: the original is kept once.
 path.write_text('{"broken":\n', encoding="utf-8")
 before = path.read_bytes()
-add(game(83), success=False)
-assert path.read_bytes() == before
+add(game(83))
+assert read() == [game(83)]
+assert (path.parent / "recentlist.json.damaged").read_bytes() == before
+(path.parent / "recentlist.json.damaged").unlink()
 
 # One ROM under two emulators is two Recents. Removing or relaunching one
 # keeps the other (review of 1.0.2, finding 1).
@@ -119,7 +122,9 @@ saved_sidecar = sidecar.read_bytes() if sidecar.exists() else None
 apps = [dict(label=f"App {i}", rompath="", launch=f"/mnt/SDCARD/App/a{i}/launch.sh", type=5)
         for i in range(2)]
 favourites.write_text("".join(json.dumps(app) + "\n" for app in apps), encoding="utf-8")
+sidecar_backup = sidecar.parent / "favourite-folders.json.bak"
 sidecar.unlink(missing_ok=True)
+sidecar_backup.unlink(missing_ok=True)  # the browser would fall back to it
 assert [restored("favorites", i) for i in range(2)] == [0, 1]
 # One ROM as two Favorites (different label and launcher): both are listed,
 # and each restores to its own row.
@@ -160,9 +165,29 @@ sidecar.write_text(json.dumps(dict(schema=1, generation=0)) + "\n" +
                                    order=0)) + "\n", encoding="utf-8")
 assert restored("favorites", 0) == 0  # Folder, then App 0, App 1
 assert restored("favorites", 2) == 2
-for path, saved in ((favourites, saved_favourites), (sidecar, saved_sidecar)):
+sidecar_backup.unlink(missing_ok=True)
+for restored_file, saved in ((favourites, saved_favourites), (sidecar, saved_sidecar)):
     if saved is None:
-        path.unlink(missing_ok=True)
+        restored_file.unlink(missing_ok=True)
     else:
-        path.write_bytes(saved)
+        restored_file.write_bytes(saved)
+# Damaged Recents (review of 1.0.3): a confirmed clear always clears, and
+# recording a launch skips unreadable lines after keeping the original once.
+damaged_copy = path.parent / "recentlist.json.damaged"
+for content in (json.dumps(a) + "\n{broken\n", "{broken\n", '[1,2]\n"text"\n',
+                json.dumps(a) + "\n\x00\x01binary\n"):
+    path.write_bytes(content.encode("utf-8"))
+    assert subprocess.run([str(BUILD / "fixture-recent"), str(sd), "clear"],
+                          timeout=20).returncode == 0, content
+    assert path.read_bytes() == b"", content
+damaged_copy.unlink(missing_ok=True)
+original = (json.dumps(a) + "\n{broken\n").encode("utf-8")
+path.write_bytes(original)
+add(b)
+assert read() == [b, a]  # the launch is recorded, the readable game kept
+assert damaged_copy.read_bytes() == original
+path.write_bytes((json.dumps(b) + "\n{other damage\n").encode("utf-8"))
+add(a)
+assert read() == [a, b] and damaged_copy.read_bytes() == original  # first copy kept
+damaged_copy.unlink()
 print("Recent writer scenarios passed")
