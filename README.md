@@ -26,6 +26,8 @@ Known gaps: behaviour has been checked on a Mini Plus more than on the other two
 
 If something goes wrong, see [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md), including how to enable logging and how to resolve an interrupted ROM deletion.
 
+How the cursor and the list window move, including where this differs from stock on purpose, is described in [docs/NAVIGATION.md](docs/NAVIGATION.md).
+
 Some newer labels (folder actions, Tweaks, the About device rows) appear in English regardless of the selected language, because their translation IDs do not exist in Onion's language files yet. See [lang/README.md](lang/README.md).
 
 ## Themes
