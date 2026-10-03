@@ -89,4 +89,18 @@ for name, damaged in (("nul-start", b"\x00" + valid), ("nul-middle", valid[:5] +
     assert (SD / "appconfigs/romwinidx.json.bad").read_bytes() == damaged, name
     saved = json.loads((SD / "appconfigs/romwinidx.json").read_text())
     assert isinstance(saved.get("list"), list) and saved["list"], (name, saved)
+
+# A record with "pos" written more than once (one of them the wrong type):
+# one save leaves a single pos with the new value; other fields are kept.
+(SD / "appconfigs/romwinidx.json.bad").unlink(missing_ok=True)
+record = saved["list"][0]
+(SD / "appconfigs/romwinidx.json").write_text(
+    '{"list":[{"rompath":%s,"pos":0,"pos":"bad","pos":3,"start":0,"end":5,"note":"kept"}]}'
+    % json.dumps(record["rompath"]))
+command, stderr = launch("duplicate-pos")
+assert "Two.nes" in command and "launching anyway" not in stderr, stderr
+text = (SD / "appconfigs/romwinidx.json").read_text()
+records = json.loads(text)["list"]
+assert text.count('"pos"') == len(records) and '"note":"kept"' in text, text  # one per record
+assert all(isinstance(row["pos"], int) for row in records), text
 print("launch_position: ok")

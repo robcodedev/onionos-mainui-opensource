@@ -36,6 +36,39 @@ static int press(MainUIApp *ui, SDLKey key)
     return volume;
 }
 
+/* A key written more than once in system.json: one save leaves a single copy
+ * with the new value, which is what the next read sees (review of 1.0.3). */
+static int duplicates(const char *sd)
+{
+    char path[4096];
+    snprintf(path, sizeof path, "%s/system.json", sd);
+    FILE *file = fopen(path, "wb");
+    assert(file && fputs("{\"brightness\":7,\"brightness\":2,\"bgmvol\":\"x\",\"bgmvol\":3,"
+                         "\"bgmvol\":4,\"other\":{\"kept\":true}}\n",
+                         file) >= 0);
+    assert(fclose(file) == 0);
+    assert(saved(sd, "brightness") == 7); /* cJSON reads the first copy */
+    cJSON *values = cJSON_CreateObject();
+    assert(values && cJSON_AddNumberToObject(values, "brightness", 8) &&
+           cJSON_AddNumberToObject(values, "bgmvol", 5));
+    assert(mainui_system_patch(sd, values));
+    cJSON_Delete(values);
+    assert(saved(sd, "brightness") == 8 && saved(sd, "bgmvol") == 5);
+    cJSON *system = mainui_system_read(sd);
+    int copies = 0;
+    const cJSON *item;
+    cJSON_ArrayForEach(item, system)
+    {
+        copies += !strcmp(item->string, "brightness") || !strcmp(item->string, "bgmvol");
+    }
+    assert(copies == 2);
+    assert(cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(
+        cJSON_GetObjectItemCaseSensitive(system, "other"), "kept")));
+    cJSON_Delete(system);
+    puts("Duplicate settings keys are replaced by one value");
+    return 0;
+}
+
 /* Brightness, Menu sound and Sleep timer click on every Left/Right (#10). */
 static int sounds(const char *sd)
 {
@@ -100,6 +133,9 @@ int main(int argc, char **argv)
     assert(argc == 3 || argc == 4);
     if (argc == 4 && !strcmp(argv[3], "sounds")) {
         return sounds(argv[2]);
+    }
+    if (argc == 4 && !strcmp(argv[3], "duplicates")) {
+        return duplicates(argv[2]);
     }
     MainUIStockSettings settings;
     mainui_stock_settings_load(&settings, argv[1], argv[2], 0);

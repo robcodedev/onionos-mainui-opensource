@@ -191,7 +191,10 @@ bool mainui_positions_save(const MainUICatalog *catalog, const MainUIViewport *v
         const char *keys[] = {"pos", "start", "end"};
         int values[] = {saved->selected, saved->start, saved->end};
         for (int k = 0; ok && k < 3; ++k) {
-            cJSON_DeleteItemFromObjectCaseSensitive(item, keys[k]);
+            /* Every occurrence: a duplicate left behind would be read instead. */
+            while (cJSON_GetObjectItemCaseSensitive(item, keys[k])) {
+                cJSON_DeleteItemFromObjectCaseSensitive(item, keys[k]);
+            }
             ok = cJSON_AddNumberToObject(item, keys[k], values[k]) != NULL;
         }
     }

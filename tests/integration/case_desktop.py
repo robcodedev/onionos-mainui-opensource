@@ -60,6 +60,9 @@ subprocess.run([str(BUILD / "fixture-stock_settings"),str(CONFIG),str(SD)],cwd=R
 SOUNDS = OUT/'sounds-sd'
 SOUNDS.mkdir(exist_ok=True)
 subprocess.run([str(BUILD / "fixture-stock_settings"),str(CONFIG),str(SOUNDS),'sounds'],cwd=ROOT,check=True,timeout=20)
+DUPLICATES = OUT/'duplicates-sd'
+DUPLICATES.mkdir(exist_ok=True)
+subprocess.run([str(BUILD / "fixture-stock_settings"),str(CONFIG),str(DUPLICATES),'duplicates'],cwd=ROOT,check=True,timeout=20)
 assert settings != capture('settings-whitelist','RRE')
 print('Desktop checks passed: mapped buttons, Apps list, stock Settings navigation/whitelist, no invented settings writes')
 

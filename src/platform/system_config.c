@@ -62,7 +62,10 @@ static bool patch_unlocked(const char *sd, const cJSON *values)
     cJSON_ArrayForEach(item, values)
     {
         cJSON *copy = cJSON_Duplicate(item, true);
-        cJSON_DeleteItemFromObjectCaseSensitive(root, item->string);
+        /* Every occurrence: a duplicate left behind would be read instead. */
+        while (cJSON_GetObjectItemCaseSensitive(root, item->string)) {
+            cJSON_DeleteItemFromObjectCaseSensitive(root, item->string);
+        }
         if (!copy || !cJSON_AddItemToObject(root, item->string, copy)) {
             cJSON_Delete(copy);
             cJSON_Delete(root);
