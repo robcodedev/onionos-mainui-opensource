@@ -201,6 +201,30 @@ assert create_once(sd, "Unrelated").returncode == 0
 assert (sd / "Roms/favourite-folders.json.damaged").read_bytes() == broken
 names = set(names_in(sidecar))
 assert {"Container", "Nested", "Unrelated"} <= names, names
+# A main file that cannot be read as text at all (NUL bytes, as a power cut on
+# FAT can leave, or over the 8 MiB limit) is moved aside unchanged, never
+# replacing a kept copy, and editing works on the valid backup. A read error
+# is not damage: an unreadable main file (here a folder) still stops the edit.
+for name, content in (("nul", b"\x00" * 4096), ("oversize", b" " * (8 * 1024 * 1024 + 1))):
+    sd = fixture(f"unreadable-{name}")
+    sidecar = sd / "Roms/favourite-folders.json"
+    backup = sd / "Roms/favourite-folders.json.bak"
+    backup.write_bytes(sidecar.read_bytes())
+    sidecar.write_bytes(content)
+    earlier = sd / "Roms/favourite-folders.json.damaged"
+    earlier.write_bytes(b"an earlier copy")
+    assert create_once(sd, "Unrelated").returncode == 0
+    assert earlier.read_bytes() == b"an earlier copy"
+    kept = [p for p in sd.glob("Roms/favourite-folders.json.damaged-*")]
+    assert len(kept) == 1 and kept[0].read_bytes() == content, kept
+    assert {"Container", "Nested", "Unrelated"} <= set(names_in(sidecar))
+sd = fixture("unreadable-folder")
+sidecar = sd / "Roms/favourite-folders.json"
+(sd / "Roms/favourite-folders.json.bak").write_bytes(sidecar.read_bytes())
+sidecar.unlink()
+sidecar.mkdir()
+assert create_once(sd, "Unrelated").returncode != 0
+assert sidecar.is_dir() and not list(sd.glob("Roms/*.damaged*"))
 # A newer schema is not damage: refused as before, nothing changed or kept.
 sd = fixture("newer-schema-with-backup")
 sidecar = sd / "Roms/favourite-folders.json"

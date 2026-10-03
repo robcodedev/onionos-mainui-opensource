@@ -30,7 +30,7 @@
 ### Favorites folders
 
 * When editing Favorites folders saves a repair of a damaged `favourite-folders.json` (for example a folder without a name, a duplicate folder, or folders inside each other in a loop), the damaged original is first kept as `favourite-folders.json.damaged`, which later edits never replace. Before, the only copy was `.bak`, which the next edit overwrote.
-* When `favourite-folders.json` is damaged but still readable as text, and its backup is not damaged, folders can be edited again: the damaged file is kept as `.damaged` and editing continues from the backup, which browsing already showed.
+* When `favourite-folders.json` is damaged and its backup is not, folders can be edited again: the damaged file is kept as `.damaged` and editing continues from the backup, which browsing already showed. This includes a file that cannot be read as text at all, such as one filled with zero bytes by a power cut, or one over 8 MiB: it is moved aside unchanged.
 * When `favourite-folders.json` is missing and only its backup is left, editing works on the whole backup. Before, the first edit kept the folders but dropped everything else in it, such as extra fields from other tools and the placement of games no longer in Favorites, and the second edit replaced the backup. A backup that cannot be used is kept as `.damaged` first; one of a newer format is left alone and the edit refused.
 * Removing a Favorites folder no longer leaves two folders of the same name side by side when a folder inside it has the same name as one next to it. Rename one of them first; the message says so.
 

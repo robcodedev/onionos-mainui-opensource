@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #define SIDECAR_LIMIT (8 * 1024 * 1024)
 
 static const char *string(const cJSON *json, const char *key)
@@ -416,6 +417,58 @@ static void promote_backup(MainUIFavoriteStore *store)
     store->records = records;
 }
 
+/* The main sidecar has NUL bytes or is too large to read as text, while its
+ * backup is a valid document, which browsing shows. Move the main file aside
+ * unchanged as .damaged (or .damaged-<generation>), never replacing a copy,
+ * and continue from the backup as promote_backup() does. The store holds the
+ * .mainui-library lock, which makes the check-then-rename safe. */
+static void set_aside_unreadable(MainUIFavoriteStore *store)
+{
+    struct stat current;
+    if (lstat(store->path, &current) || !S_ISREG(current.st_mode)) {
+        return; /* only a file with damaged content, nothing else */
+    }
+    char backup[sizeof store->path + 8];
+    snprintf(backup, sizeof backup, "%s.bak", store->path);
+    char *saved = NULL;
+    cJSON *records = read_document(backup, &saved);
+    if (!records || !saved) {
+        cJSON_Delete(records);
+        free(saved);
+        return;
+    }
+    const cJSON *generation =
+        cJSON_GetObjectItemCaseSensitive(cJSON_GetArrayItem(records, 0), "generation");
+    bool moved = false;
+    for (int attempt = 0; attempt < 2 && !moved; attempt++) {
+        char path[4096];
+        struct stat info;
+        int length = attempt ? snprintf(path, sizeof path, "%s.damaged-%d", store->path,
+                                        cJSON_IsNumber(generation) ? generation->valueint : 0)
+                             : snprintf(path, sizeof path, "%s.damaged", store->path);
+        if (length < 0 || length >= (int)sizeof path ||
+            !(lstat(path, &info) != 0 && errno == ENOENT)) {
+            continue; /* that name is taken: never replace a kept copy */
+        }
+        moved = mainui_move_file_new_locked(store->path, path) ||
+                (lstat(store->path, &info) != 0 && errno == ENOENT);
+        if (moved) {
+            fprintf(stderr, "Unreadable %s kept as %s\n", store->path, path);
+        }
+        else {
+            break; /* the move failed: keep the file */
+        }
+    }
+    if (!moved || !mainui_write_text_atomic(store->path, saved)) {
+        cJSON_Delete(records);
+        free(saved);
+        return;
+    }
+    fprintf(stderr, "Editing %s continues from its backup\n", store->path);
+    store->original = store->source = saved;
+    store->records = records;
+}
+
 bool mainui_favorite_store_open(MainUIFavoriteStore *store, const char *sd)
 {
     *store = (MainUIFavoriteStore){0};
@@ -429,10 +482,16 @@ bool mainui_favorite_store_open(MainUIFavoriteStore *store, const char *sd)
         !(store->lock = mainui_file_lock(lock_path))) {
         return false;
     }
+    errno = 0;
     store->records = read_document(store->path, &store->original);
+    int error = errno;
     store->source = store->original;
     if (!store->records && store->original) {
         promote_backup(store);
+    }
+    /* Damaged content that cannot be read as text, never a read error. */
+    if (!store->records && !store->original && (error == EINVAL || error == EFBIG)) {
+        set_aside_unreadable(store);
     }
     if (store->records && !store->original) {
         /* No main sidecar: browsing shows the .bak, so edit that whole
