@@ -506,16 +506,11 @@ bool mainui_screen_context_menu_key(MainUIApp *ui, SDLKey key, int *requested_se
         }
         else if (mainui_favorite_edit(&ui->favorite_editor, ui->library, ui->sd, entry->action,
                                       NULL, &ui->view.selected)) {
-            int selected = ui->view.selected;
-            if (entry->action == CONTEXT_FAVORITE_PASTE) {
-                int start = selected >= ui->config.rows ? selected - ui->config.rows + 1 : 0;
-                mainui_viewport_restore(&ui->view, ui->library->visible_count, ui->config.rows,
-                                        selected, start, start + ui->config.rows - 1);
-            }
-            else {
-                ui->view.total = ui->library->visible_count;
-                mainui_viewport_move(&ui->view, ui->config.rows, 0, false);
-            }
+            /* Keep the visible window and scroll only as far as needed to show
+             * the selection, also after Paste: a move within the window must
+             * not jump the list. */
+            ui->view.total = ui->library->visible_count;
+            mainui_viewport_move(&ui->view, ui->config.rows, 0, false);
             ui->library->views[ui->library->current + 1] = ui->view;
             ui->cached_start = -1;
             ui->selected_at = SDL_GetTicks();

@@ -40,6 +40,14 @@ int mainui_suite_core(void)
     CHECK(v.selected == 0 && v.start == 0 && v.end == 9);
     mainui_viewport_move(&v, 10, INT_MAX, false);
     CHECK(v.selected == 49 && v.start == 40 && v.end == 49);
+    /* A list that grew under a short window (Paste into an empty folder:
+     * ".." plus the pasted Favorite) keeps its top row in view. */
+    v = (MainUIViewport){2, 1, 0, 0};
+    mainui_viewport_move(&v, 6, 0, false);
+    CHECK(v.selected == 1 && v.start == 0 && v.end == 1);
+    v = (MainUIViewport){9, 8, 0, 7};
+    mainui_viewport_move(&v, 6, 0, false);
+    CHECK(v.selected == 8 && v.start == 3 && v.end == 8);
     /* Exercise invariants across row counts, empty/small lists and repeated
      * navigation; fixed expected positions alone miss range/overflow failures.
      */

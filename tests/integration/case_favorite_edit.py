@@ -229,3 +229,57 @@ assert delete_once(sd, "a").returncode == 0
 rows = {row["id"]: row for row in map(json.loads, sidecar.read_text().splitlines()) if "id" in row}
 assert set(rows) == {"x", "a1", "a2"} and rows["a1"]["parent"] == rows["a2"]["parent"] == ""
 print("Folder removal refuses duplicate sibling names and promotes distinct ones")
+
+
+# Paste keeps the visible window when the moved Favorite stays inside it and
+# otherwise scrolls only as far as needed, like moving the cursor there.
+def window_case(name, ups):
+    sd = fixture(name)
+    write_lines(sd / "Roms/favourite.json",
+                [dict(label=f"Game {i:02}", rompath=f"/mnt/SDCARD/Roms/FC/{i:02}.nes", type=5)
+                 for i in range(20)])
+    (sd / "Roms/favourite-folders.json").unlink(missing_ok=True)
+    # Wrap to the last game, Move it up `ups` rows, Paste.
+    moved = capture(sd, name + "-moved", "EU" + "SE" + "U" * ups + "SE")
+    # The same list and cursor, reached by navigation alone.
+    assert capture(sd, name + "-navigated", "EU" + "U" * ups) == moved, name
+
+window_case("paste-within-window", 3)
+window_case("paste-above-window", 9)
+
+# Between folders the list sizes change on both sides (review of v6). Root
+# shows folders first, then games; a folder opens on its ".." row.
+def folder_fixture(name, inside):
+    sd = fixture(name)
+    write_lines(sd / "Roms/favourite.json",
+                [dict(label=f"Game {i:02}", rompath=f"/mnt/SDCARD/Roms/FC/{i:02}.nes", type=5)
+                 for i in range(3 + inside)])
+    write_lines(sd / "Roms/favourite-folders.json",
+                [dict(schema=1, generation=0), dict(kind="folder", id="f", parent="", name="Folder",
+                                                     order=0)] +
+                [dict(kind="item", key=f"/mnt/SDCARD/Roms/FC/{i:02}.nes", type=5, folder="f",
+                      order=i - 3) for i in range(3, 3 + inside)])
+    return sd
+
+def folder_case(name, inside, downs):
+    # Move the last root game, open Folder (Down wraps to it), step down, Paste.
+    paste = "EDDDSEDE" + "D" * downs + "SE"
+    sd = folder_fixture(name, inside)
+    moved = capture(sd, name + "-moved", paste)
+    # The pasted game's row in the folder, after "..", from the saved order.
+    rows = [json.loads(line) for line in
+            (sd / "Roms/favourite-folders.json").read_text().splitlines()]
+    inside_rows = sorted((row for row in rows if row.get("folder") == "f"),
+                         key=lambda row: row["order"])
+    row = 1 + [row["key"] for row in inside_rows].index("/mnt/SDCARD/Roms/FC/02.nes")
+    assert len(inside_rows) == inside + 1 and row in (downs, downs + 1), (name, row)
+    assert capture(sd, name + "-navigated", "EE" + "D" * row) == moved, name
+    # Back at the root in the same session, one game fewer: as if freshly opened.
+    sd = folder_fixture(name + "-back", inside)
+    back = capture(sd, name + "-back", paste + "B")
+    assert capture(sd, name + "-root", "E") == back, name
+
+folder_case("paste-into-empty-folder", 0, 0)
+folder_case("paste-into-long-folder", 10, 2)
+folder_case("paste-into-long-folder-end", 10, 9)
+print("Paste keeps the list window unless the moved Favorite leaves it")

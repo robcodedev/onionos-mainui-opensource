@@ -73,7 +73,13 @@ void mainui_viewport_move(MainUIViewport *v, int rows, int delta, bool wrap)
         start = (int)next;
     }
     if (next > v->end) {
+        /* Scroll just far enough. The window end is stale when the list has
+         * grown (Paste or Create), so the start can come out negative; the
+         * window then begins at the top instead of at the selection. */
         start = (int)next - (rows > 0 ? rows : 6) + 1;
+        if (start < 0) {
+            start = 0;
+        }
     }
     mainui_viewport_restore(v, v->total, rows, (int)next, start, (int)next);
 }
