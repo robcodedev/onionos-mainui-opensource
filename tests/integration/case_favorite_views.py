@@ -39,12 +39,14 @@ def fixture(name, games, folders=(), assignments=()):
     return sd
 
 
-def capture(sd, name, actions, text=None):
+def capture(sd, name, actions, text=None, handoff=None):
     path = OUT / f"{sd.name}-{name}.bmp"
     command = [str(BUILD / "MainUI-dev"), "--sd-root", str(sd), "--theme", str(ONION_THEME),
                "--input", actions, "--snapshot", str(path)]
     if text is not None:
         command += ["--text", text]
+    if handoff is not None:
+        command += ["--handoff-dir", str(handoff)]
     subprocess.run(command, cwd=ROOT, check=True, timeout=30)
     return path.read_bytes()
 
@@ -121,4 +123,36 @@ sd = fixture("remove-last", 20)
 after = capture(sd, "removed", "EU" + "SDDDE")
 assert len((sd / "Roms/favourite.json").read_text().splitlines()) == 19
 assert capture(sd, "navigated", "EU") == after
+
+# 4. Folders reordered while a game runs: after the return, Back selects the
+# folder it came from at its new row, not the row it had (audit A5). Root
+# A, B; A holds X, Y; the game is in Y. Then B and Y move first.
+def launched_fixture(name):
+    sd = fixture(name, 1, [("a", "", "A", 0), ("b", "", "B", 1), ("x", "a", "X", 0),
+                           ("y", "a", "Y", 1)], [(0, "y")])
+    games = [json.loads(line) for line in (sd / "Roms/favourite.json").read_text().splitlines()]
+    write_lines(sd / "Roms/favourite.json",
+                [dict(game, launch="/mnt/SDCARD/Emu/FC/launch.sh") for game in games])
+    return sd
+
+
+def reorder(sd):
+    rows = [json.loads(line) for line in (sd / "Roms/favourite-folders.json").read_text().splitlines()]
+    order = {"a": 1, "b": 0, "x": 1, "y": 0}
+    write_lines(sd / "Roms/favourite-folders.json",
+                [dict(row, order=order[row["id"]]) if row.get("kind") == "folder" else row
+                 for row in rows])
+
+
+for back, navigated in (("B", "EDED"), ("BB", "ED")):
+    sd = launched_fixture(f"returned-{len(back)}")
+    handoff = OUT / f"returned-{len(back)}-handoff"
+    handoff.mkdir()
+    capture(sd, "launch", "EEDDEDE", None, handoff)  # Favorites, A, Y, the game
+    assert (handoff / "cmd_to_run.sh").exists()
+    (handoff / "cmd_to_run.sh").unlink()  # the runtime ran it
+    reorder(sd)
+    shot = capture(sd, "returned", back, None, handoff)
+    assert not (handoff / "mainui-return.json").exists()
+    assert capture(sd, "navigated", navigated) == shot, back
 print("Favorite edits keep list windows and parent positions:", OUT)

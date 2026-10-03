@@ -254,6 +254,9 @@ bool mainui_session_restore_control(MainUISession *out, const char *sd, bool sen
                     }
                 }
             }
+            /* The saved rows of the folders above may name other folders
+             * now: the folders may have been reordered meanwhile. */
+            mainui_library_select_path(pending.library);
         }
         if (ok) {
             restore_view(&pending.view, pending.library->visible_count, rows, &selected_view);

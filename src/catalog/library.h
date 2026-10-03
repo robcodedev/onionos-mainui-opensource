@@ -77,6 +77,11 @@ bool mainui_library_open(MainUILibrary *library, const char *sd, bool recent);
 /* Exact persistent ROM-path membership, independent of folder or display label. */
 bool mainui_library_contains(const MainUILibrary *library, const char *rom);
 bool mainui_library_reload(MainUILibrary *library, const char *sd);
+/* Every folder on the way down to the current one selects the row that leads
+ * on, found in the order it is displayed now, so Back returns to the folder
+ * it came from even if the rows moved. The caller fits the windows to their
+ * lists when it shows them. */
+void mainui_library_select_path(MainUILibrary *library);
 void mainui_library_close(MainUILibrary *library);
 const char *mainui_library_label(const MainUILibrary *library, int index);
 bool mainui_library_is_folder(const MainUILibrary *library, int index);

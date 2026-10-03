@@ -36,3 +36,5 @@ Edits change the list under the window: Create, Rename, Sort, Delete, Move and P
 - **A short list keeps its top row.** In a folder, the `..` row stays in view, also after pasting or creating the first entry there.
 
 Folders remember where you were. Back returns to the row and window you entered the folder from, also after editing inside it, at any depth. The remembered place of a folder you have visited survives edits elsewhere, and is dropped only when that folder is removed.
+
+This also holds when the folders were reordered outside MainUI while a game ran: Back selects the folder you came from at its new row.

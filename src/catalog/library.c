@@ -609,11 +609,25 @@ static int row_in_parent(MainUILibrary *library, int child, int *total)
     return 0;
 }
 
+void mainui_library_select_path(MainUILibrary *library)
+{
+    int current = library->current;
+    for (int child = current, depth = 0; child >= 0 && depth <= MAINUI_FOLDER_LIMIT; depth++) {
+        int parent = library->folders[child].parent, total = 0;
+        MainUIViewport *view = &library->views[parent + 1];
+        view->selected = row_in_parent(library, child, &total);
+        view->total = total;
+        child = parent;
+    }
+    if (current >= 0) {
+        library->current = current;
+        show_folder(library);
+    }
+}
+
 /* An edit reloads the whole library; keep the windows remembered for other
- * folders, matched by folder id (a removed folder's goes). Every folder on
- * the way down to the current one points at the row that leads on, so Back
- * returns to the same place even if an edit moved that row. The caller fits
- * the windows to their lists when it shows them. */
+ * folders, matched by folder id (a removed folder's goes), then point the way
+ * down to the current folder at its rows. */
 static void keep_views(MainUILibrary *fresh, const MainUILibrary *old)
 {
     fresh->views[0] = old->views[0];
@@ -625,18 +639,7 @@ static void keep_views(MainUILibrary *fresh, const MainUILibrary *old)
             }
         }
     }
-    int current = fresh->current;
-    for (int child = current, depth = 0; child >= 0 && depth <= MAINUI_FOLDER_LIMIT; depth++) {
-        int parent = fresh->folders[child].parent, total = 0;
-        MainUIViewport *view = &fresh->views[parent + 1];
-        view->selected = row_in_parent(fresh, child, &total);
-        view->total = total;
-        child = parent;
-    }
-    if (current >= 0) {
-        fresh->current = current;
-        show_folder(fresh);
-    }
+    mainui_library_select_path(fresh);
 }
 
 bool mainui_library_reload(MainUILibrary *library, const char *sd)
