@@ -368,6 +368,44 @@ static bool publish(const char *path, const char *original, const char *text)
     return mainui_write_text_atomic(path, text);
 }
 
+/* The main sidecar was read but is not a usable schema-1 document, while
+ * browsing already shows its .bak. Make editing work the same: keep the
+ * damaged bytes as .damaged (never replacing an earlier copy), then publish
+ * the backup, which must itself be valid, as the main file. A readable header
+ * with another schema is a newer format, not damage, and is left alone. */
+static void promote_backup(MainUIFavoriteStore *store)
+{
+    char *newline = strchr(store->original, '\n');
+    cJSON *header = cJSON_ParseWithLength(
+        store->original, newline ? (size_t)(newline - store->original) : strlen(store->original));
+    const cJSON *schema = cJSON_GetObjectItemCaseSensitive(header, "schema");
+    bool other_schema = cJSON_IsNumber(schema) && schema->valuedouble != 1;
+    cJSON_Delete(header);
+    char backup[sizeof store->path + 8];
+    snprintf(backup, sizeof backup, "%s.bak", store->path);
+    char *saved = NULL;
+    cJSON *records = other_schema ? NULL : read_document(backup, &saved);
+    if (!records || !saved) {
+        cJSON_Delete(records);
+        free(saved);
+        return;
+    }
+    /* keep_damaged() names the copy after the generation it was found with. */
+    cJSON *damaged_records = records;
+    MainUIFavoriteStore damaged = {.original = store->original, .records = damaged_records};
+    snprintf(damaged.path, sizeof damaged.path, "%s", store->path);
+    if (!mainui_favorite_store_keep_damaged(&damaged) ||
+        !mainui_write_text_atomic(store->path, saved)) {
+        cJSON_Delete(records);
+        free(saved);
+        return;
+    }
+    fprintf(stderr, "Damaged %s replaced by its backup to allow editing\n", store->path);
+    free(store->original);
+    store->original = saved;
+    store->records = records;
+}
+
 bool mainui_favorite_store_open(MainUIFavoriteStore *store, const char *sd)
 {
     *store = (MainUIFavoriteStore){0};
@@ -382,6 +420,9 @@ bool mainui_favorite_store_open(MainUIFavoriteStore *store, const char *sd)
         return false;
     }
     store->records = read_document(store->path, &store->original);
+    if (!store->records && store->original) {
+        promote_backup(store);
+    }
     return store->records != NULL;
 }
 

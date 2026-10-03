@@ -87,9 +87,20 @@ assert sidecar.read_bytes() == before
 capture(ui, "locked-create", "ESDET", "Locked")
 assert sidecar.read_bytes() == before
 (sidecar.parent / (sidecar.name + ".writing")).unlink()
+# A damaged sidecar without a usable backup is refused and left as it is.
+backup = sidecar.parent / (sidecar.name + ".bak")
+good_backup = backup.read_bytes()
+backup.unlink()
 sidecar.write_bytes(b"{broken")
 capture(ui, "malformed-create", "ESDET", "Unsafe")
 assert sidecar.read_bytes() == b"{broken"
+assert not (sidecar.parent / (sidecar.name + ".damaged")).exists()
+# With a valid backup (what browsing shows), the edit works on the backup and
+# the damaged bytes are kept as .damaged.
+backup.write_bytes(good_backup)
+capture(ui, "malformed-create-backup", "ESDET", "Unsafe")
+assert (sidecar.parent / (sidecar.name + ".damaged")).read_bytes() == b"{broken"
+assert any(json.loads(line).get("name") == "Unsafe" for line in sidecar.read_text().splitlines())
 assert (ui / "Roms/favourite.json").read_bytes() == stock
 print("Favorite editing persistence, UI name/cancel/cut flow, unknown fields and failed-save preservation passed:", OUT)
 
@@ -177,6 +188,28 @@ before = sidecar.read_bytes()
 result = create_once(sd, "Unrelated")
 assert result.returncode == 1 and "copy of the damaged" in result.stdout, result.stdout
 assert sidecar.read_bytes() == before
+
+# A damaged sidecar whose .bak is valid (browsing already shows the backup):
+# editing keeps the damaged bytes as .damaged, then works on the backup.
+sd = fixture("damaged-with-backup")
+sidecar = sd / "Roms/favourite-folders.json"
+backup = sd / "Roms/favourite-folders.json.bak"
+backup.write_bytes(sidecar.read_bytes())
+broken = b'{"schema":1,"generation":3}\n{"kind":"folder",broken\n'
+sidecar.write_bytes(broken)
+assert create_once(sd, "Unrelated").returncode == 0
+assert (sd / "Roms/favourite-folders.json.damaged").read_bytes() == broken
+names = set(names_in(sidecar))
+assert {"Container", "Nested", "Unrelated"} <= names, names
+# A newer schema is not damage: refused as before, nothing changed or kept.
+sd = fixture("newer-schema-with-backup")
+sidecar = sd / "Roms/favourite-folders.json"
+(sd / "Roms/favourite-folders.json.bak").write_bytes(sidecar.read_bytes())
+newer = b'{"schema":2,"generation":0}\n'
+sidecar.write_bytes(newer)
+assert create_once(sd, "Unrelated").returncode == 1
+assert sidecar.read_bytes() == newer
+assert not (sd / "Roms/favourite-folders.json.damaged").exists()
 
 # Records the reader takes exactly as written stay editable: an agreeing
 # repeated assignment, a folder without order, an over-long path (above).
