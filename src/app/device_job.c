@@ -94,7 +94,11 @@ int mainui_device_job_take(MainUIDeviceJob *job)
 }
 
 /* Upper bound for finishing Wi-Fi power work at exit or launch. Normal
- * transitions take well under a second; this only caps a stuck helper. */
+ * transitions take well under a second; this only caps a stuck helper.
+ * After cancellation the join is bounded by the adapter, not here: every
+ * wait in device_adapter.c checks the cancel flag or ends within about a
+ * second (a socket reply, a helper's SIGTERM/SIGKILL grace). A transport
+ * that ignores cancellation delays close by its own duration. */
 #define DEVICE_CLOSE_BUDGET_MS 5000u
 
 static bool close_deadline_passed(void *context)

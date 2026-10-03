@@ -280,9 +280,19 @@ static bool wifi_program(char *const arguments[], MainUICancel cancel)
         }
         poll(NULL, 0, 20);
     }
+    /* A child stuck in an uninterruptible kernel call (a hung Wi-Fi driver,
+     * say) ignores even SIGKILL. Do not block on it: closing the device job
+     * at exit or launch waits for this worker. An unreaped child is adopted
+     * by init when MainUI exits. */
     kill(child, SIGKILL);
-    while (waitpid(child, &status, 0) < 0 && errno == EINTR) {
+    for (int i = 0; i < 25; ++i) {
+        pid_t done = waitpid(child, &status, WNOHANG);
+        if (done == child || (done < 0 && errno != EINTR)) {
+            return false;
+        }
+        poll(NULL, 0, 20);
     }
+    fprintf(stderr, "Wi-Fi helper %s did not exit after SIGKILL\n", arguments[0]);
     return false;
 }
 
@@ -472,7 +482,8 @@ bool mainui_device_wifi_enable(MainUIDeviceAdapter *adapter, bool enabled, MainU
         wifi_process("udhcpc", true);
         /* Let the old supplicant release its control socket before another
          * enable can observe it and mistake it for a ready service. */
-        for (int i = 0; i < 40 && wifi_process("wpa_supplicant", false); ++i) {
+        for (int i = 0;
+             i < 40 && !mainui_cancelled(cancel) && wifi_process("wpa_supplicant", false); ++i) {
             poll(NULL, 0, 50);
         }
         char status_file[4096];

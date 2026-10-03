@@ -15,6 +15,7 @@
 typedef struct {
     int calls, fail_at;
     bool block, block_scan;
+    int ignore_cancel_ms; /* non-cooperating backend: finish late regardless */
     char commands[32][256];
 } Fake;
 
@@ -34,6 +35,10 @@ static bool transport(void *context, const char *command, char *reply, size_t si
     Fake *fake = context;
     assert(fake->calls < 32);
     snprintf(fake->commands[fake->calls++], 256, "%s", command);
+    if (fake->ignore_cancel_ms) {
+        SDL_Delay((Uint32)fake->ignore_cancel_ms);
+        return false;
+    }
     if (fake->block || (fake->block_scan && !strcmp(command, "SCAN"))) {
         for (int i = 0; i < 1000 && !mainui_cancelled(cancel); ++i) {
             SDL_Delay(1);
@@ -322,6 +327,16 @@ int main(int argc, char **argv)
     Uint32 started = SDL_GetTicks();
     mainui_device_job_close(&job);
     assert(SDL_GetTicks() - started < 500 && !job.thread && !*job.password);
+    /* A backend that ignores cancellation delays close by its own duration
+     * only; close then still joins and clears the job. */
+    fake = (Fake){.ignore_cancel_ms = 400};
+    assert(mainui_device_job_start(&job, &adapter, 4, NULL, NULL));
+    SDL_Delay(10);
+    started = SDL_GetTicks();
+    mainui_device_job_close(&job);
+    Uint32 waited = SDL_GetTicks() - started;
+    assert(waited >= 300 && waited < 1500 && !job.thread && !job.operation);
+    assert(fake.calls == 1);
     fake = (Fake){.block_scan = true};
     assert(mainui_device_job_start(&job, &adapter, 4, NULL, NULL));
     SDL_Delay(10);
