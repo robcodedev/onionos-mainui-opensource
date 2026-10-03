@@ -24,7 +24,6 @@ typedef struct {
     /* Raw config spelling is part of stock saved-record identity. */
     char *raw_rompath, *raw_imgpath;
     char *config;
-    MainUIFileStamp config_stamp;
 } MainUIEntry;
 
 typedef struct {
@@ -34,7 +33,6 @@ typedef struct {
     int folder_count; /* Leading folder rows; excluded only from the displayed counter. */
     struct MainUICache *cache;
     bool cache_fallback;
-    MainUIFileStamp directory_stamp;
     char cache_file[MAINUI_PATH_MAX], cache_table[512];
     char title[256];
     char path[MAINUI_PATH_MAX], extensions[1024], images[MAINUI_PATH_MAX];
@@ -47,7 +45,6 @@ typedef struct {
     bool case_sensitive;
     MainUINameLookup names;
     MainUICancel cancel;
-    MainUIFileStamp source_stamp;
     char sd[MAINUI_PATH_MAX];
     char error[256];
     /* Set by mainui_catalog_open() when Emu could not be enumerated (open, read
@@ -56,7 +53,6 @@ typedef struct {
     bool unreadable;
 } MainUICatalog;
 
-bool mainui_catalog_changed(MainUICatalog *catalog);
 /* Release all owned fields and clear the entry; entry must be non-NULL. */
 void mainui_entry_close(MainUIEntry *entry);
 /* Initialize a zeroed catalog from SD/Emu. Close even after failure. No ROM

@@ -451,7 +451,6 @@ static bool recover_page(MainUIApp *ui, const MainUILaunchSource *source)
                 step == 1   ? "reloading"
                 : step == 2 ? "rebuilding the cache"
                             : "scanning the folder");
-        ui->reload_search = false;
         if (mainui_catalog_job_start(&ui->catalog_job, step == 2 ? JOB_REFRESH_SYSTEM : JOB_RELOAD,
                                      source, ui->sd, ui->config.case_sensitive, ui->config.rows,
                                      NULL, ++ui->catalog_generation)) {
@@ -531,7 +530,7 @@ static bool compose_full_frame(MainUIApp *ui)
                                                      .view = &ui->view,
                                                      .home = &ui->home_view};
                         page_failed = true;
-                        /* A job already running (markers, discovery) keeps its
+                        /* A job already running (a search or discovery) keeps its
                          * slot; recovery continues on a later frame. */
                         if (!ui->catalog_job.thread && recover_page(ui, &source)) {
                             return false; /* drawn as the console grid next */

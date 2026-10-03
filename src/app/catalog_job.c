@@ -15,12 +15,7 @@ static int work(void *context)
     MainUICatalogJob *job = context;
     MainUICancel cancel = {cancelled, job};
     bool ok = false;
-    if (job->kind == JOB_MARKERS) {
-        job->session.library = calloc(1, sizeof *job->session.library);
-        ok = job->session.library &&
-             mainui_library_open_control(job->session.library, job->sd, false, cancel);
-    }
-    else if (job->kind == JOB_REFRESH_ALL) {
+    if (job->kind == JOB_REFRESH_ALL) {
         ok = mainui_browser_refresh_control(job->sd, job->sensitive, job->error, cancel);
     }
     else if (job->kind == JOB_DISCOVER) {
@@ -137,7 +132,7 @@ bool mainui_catalog_job_start(MainUICatalogJob *job, MainUIJobKind kind,
     if (query) {
         strcpy(job->query, query);
     }
-    if (kind != JOB_MARKERS && kind != JOB_DISCOVER && kind != JOB_REFRESH_ALL) {
+    if (kind != JOB_DISCOVER && kind != JOB_REFRESH_ALL) {
         MainUIStack ignored;
         job->resume = mainui_session_snapshot(source->section, source->catalog, source->library,
                                               source->view, source->home, &ignored);

@@ -284,7 +284,6 @@ int main(int argc, char **argv)
     assert(sqlite3_exec(database, "UPDATE Host_roms SET disp='Zulu moved' WHERE disp='game000'",
                         NULL, NULL, NULL) == SQLITE_OK);
     sqlite3_close(database);
-    assert(mainui_catalog_changed(opened.catalog));
     /* A changed generation cannot be paged into the old count/window. */
     MainUIEntry window[MAINUI_CACHE_WINDOW];
     int loaded = 0;
@@ -294,7 +293,6 @@ int main(int argc, char **argv)
     assert(wait_job(&job, 2, &refreshed) == JOB_READY);
     assert(refreshed.view.selected == 199);
     assert(!strcmp(mainui_browser_label(refreshed.catalog, 199), "Zulu moved"));
-    assert(!mainui_catalog_changed(refreshed.catalog));
     mainui_session_close(&refreshed);
     assert(mainui_catalog_job_start(&job, JOB_RELOAD, &source, sd, false, 6, NULL, 3));
     assert(wait_job(&job, 4, &refreshed) == JOB_CANCELLED && !refreshed.catalog);
@@ -318,7 +316,6 @@ int main(int argc, char **argv)
     assert(wait_job(&job, 7, &refreshed) == JOB_FAILED);
     assert(hash_file(file) == unchanged);
     assert(mainui_browser_label(opened.catalog, 80));
-    assert(!mainui_catalog_changed(opened.catalog));
     assert(remove(xml) == 0);
     assert(mainui_catalog_job_start(&job, JOB_REFRESH_SYSTEM, &source, sd, false, 6, NULL, 8));
     assert(wait_job(&job, 8, &refreshed) == JOB_READY);
@@ -370,12 +367,7 @@ int main(int argc, char **argv)
         favorites_path,
         "{\"label\":\"Bravo\",\"rompath\":\"/mnt/SDCARD/Roms/Host/game000.nes\",\"type\":5}\n"));
     assert(mainui_library_changed(saved, sd));
-    MainUILaunchSource marker_source = {.section = MAINUI_MENU_FAVORITES};
-    assert(mainui_catalog_job_start(&job, JOB_MARKERS, &marker_source, sd, false, 6, NULL, 5));
-    assert(wait_job(&job, 5, &refreshed) == JOB_READY);
-    assert(!strcmp(mainui_library_label(refreshed.library, 0), "Bravo"));
     assert(!strcmp(mainui_library_label(saved, 0), "Alpha"));
-    mainui_session_close(&refreshed);
     mainui_library_close(saved);
     free(saved);
     SDL_Quit();

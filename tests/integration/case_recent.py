@@ -102,7 +102,7 @@ write([b, searched])
 remove(1)
 assert read() == [b]
 
-# Restoring a selection (after a launch, or a background reload of the list)
+# Restoring a selection (after a launch, or a reload of the list)
 # finds the selected entry by the list's own identity (review of 1.0.3).
 def restored(section, index):
     result = subprocess.run([str(BUILD / "fixture-recent"), str(sd), "restore", section,

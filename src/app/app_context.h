@@ -81,12 +81,10 @@ typedef struct {
     MainUISearch search;
     uint64_t catalog_generation;
     bool search_confirm_held;
-    bool reload_search;
     /* Recovering a list page that cannot be read: 0 none, then the step
      * taken last: 1 reloaded, 2 rebuilt the cache, 3 switched to scanning. */
     int page_recovery;
     bool system_damage_reported; /* the damaged-system.json message was shown */
-    Uint32 next_catalog_check;
     int timer_interval;
     bool timer_failure_logged;
     bool search_keyboard;

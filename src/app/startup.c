@@ -3,6 +3,7 @@
 #include "app/options.h"
 #include "app/positions.h"
 #include "app/render.h"
+#include "app/screen_events.h"
 #include "localization/language.h"
 #include "platform/audio.h"
 #include "platform/launch.h"
@@ -391,8 +392,6 @@ void mainui_restore_session(MainUIApp *ui)
     ui->search = (MainUISearch){0};
     ui->catalog_generation = 0;
     ui->search_confirm_held = false;
-    ui->reload_search = false;
-    ui->next_catalog_check = SDL_GetTicks() + 5000;
     ui->timer_interval = 0;
     ui->search_keyboard = false;
     ui->wifi_was_visible = false;
@@ -406,12 +405,9 @@ void mainui_restore_session(MainUIApp *ui)
     memset(ui->message_title, 0, sizeof ui->message_title);
     memset(ui->message_body, 0, sizeof ui->message_body);
     ui->library = NULL;
-    ui->favorites = ui->sd ? calloc(1, sizeof *ui->favorites) : NULL;
-    if (ui->favorites && !mainui_library_open(ui->favorites, ui->sd, false)) {
-        mainui_library_close(ui->favorites);
-        free(ui->favorites);
-        ui->favorites = NULL;
-    }
+    /* Without markers, opening a section or a menu tries again. */
+    ui->favorites = NULL;
+    mainui_markers_refresh(ui, true);
     memset(ui->favorite_rows, 0, sizeof ui->favorite_rows);
     ui->favorite_editor = (MainUIFavoriteEditor){0};
     ui->name_input = (MainUINameInput){0};

@@ -6,7 +6,6 @@
 #include <stdatomic.h>
 
 typedef enum {
-    JOB_MARKERS,
     JOB_DISCOVER,
     JOB_ENTER,
     JOB_RELOAD,

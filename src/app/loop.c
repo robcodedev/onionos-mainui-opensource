@@ -118,7 +118,6 @@ bool mainui_poll_jobs(MainUIApp *ui)
                 SDL_EnableKeyRepeat(ui->config.repeat_delay, ui->config.repeat_interval);
                 ui->letter_jump.active = false;
                 ui->search_confirm_held = ui->search.release_pending = false;
-                ui->next_catalog_check = 0;
             }
             if (refresh_due && ui->real_device && !ui->device_job.thread && !ui->snapshot) {
                 cJSON *system = mainui_system_read(ui->sd);
@@ -174,19 +173,6 @@ bool mainui_reap_jobs(MainUIApp *ui)
         MainUIJobResult result = mainui_catalog_job_take(&ui->catalog_job, ui->catalog_generation,
                                                          &completed, &found, ui->message_body);
         if (result == JOB_READY && kind == JOB_SEARCH) {
-            if (ui->reload_search && ui->search.results) {
-                cJSON *saved = cJSON_CreateObject();
-                cJSON_AddNumberToObject(saved, "currpos", ui->view.selected);
-                cJSON_AddNumberToObject(saved, "pagestart", ui->view.start);
-                cJSON_AddNumberToObject(saved, "pageend", ui->view.end);
-                const cJSON *selected =
-                    ui->view.selected >= 0 && ui->view.selected < ui->search.results->count
-                        ? ui->search.results->items[ui->view.selected].json
-                        : NULL;
-                mainui_search_restore_view(&found, saved, selected, ui->config.rows);
-                found.postgame = ui->search.postgame;
-                cJSON_Delete(saved);
-            }
             if (completed.catalog) {
                 MainUICatalog **target =
                     completed.section == MAINUI_MENU_EXPERT ? &ui->expert : &ui->games;
@@ -203,9 +189,7 @@ bool mainui_reap_jobs(MainUIApp *ui)
             ui->library = ui->search.results;
             ui->view = ui->search.view;
             ui->search.release_pending = ui->search_confirm_held;
-            if (!ui->reload_search) {
-                mainui_launch_clear_search(ui->handoff_dir);
-            }
+            mainui_launch_clear_search(ui->handoff_dir);
             ui->search_keyboard = false;
             mainui_name_input_close(&ui->name_input);
         }
@@ -220,8 +204,19 @@ bool mainui_reap_jobs(MainUIApp *ui)
                 ui->home = true;
             }
             else {
-                MainUICatalog **target =
-                    completed.section == MAINUI_MENU_EXPERT ? &ui->expert : &ui->games;
+                bool expert = completed.section == MAINUI_MENU_EXPERT;
+                MainUICatalog **target = expert ? &ui->expert : &ui->games;
+                MainUIViewport *saved = expert ? &ui->expert_view : &ui->games_view;
+                /* Opening Games or Expert reads the consoles again: select the
+                 * console that was selected before, wherever it is now. Its
+                 * config file names it: two emulators can share a ROM folder. */
+                char previous[MAINUI_PATH_MAX] = "";
+                if (kind == JOB_DISCOVER && *target && saved->selected >= 0 &&
+                    saved->selected < (*target)->pages[0].count &&
+                    (*target)->pages[0].entries[saved->selected].config) {
+                    snprintf(previous, sizeof previous, "%s",
+                             (*target)->pages[0].entries[saved->selected].config);
+                }
                 if (*target) {
                     mainui_catalog_close(*target);
                     free(*target);
@@ -229,7 +224,20 @@ bool mainui_reap_jobs(MainUIApp *ui)
                 *target = completed.catalog;
                 ui->catalog = completed.catalog;
                 ui->view = completed.view;
-                if (completed.section == MAINUI_MENU_EXPERT) {
+                if (kind == JOB_DISCOVER && ui->catalog->pages[0].count) {
+                    int row = saved->selected < ui->catalog->pages[0].count
+                                  ? saved->selected
+                                  : ui->catalog->pages[0].count - 1;
+                    for (int i = 0; *previous && i < ui->catalog->pages[0].count; i++) {
+                        const char *config = ui->catalog->pages[0].entries[i].config;
+                        if (config && !strcmp(config, previous)) {
+                            row = i;
+                            break;
+                        }
+                    }
+                    mainui_browser_grid_restore(ui->catalog, &ui->view, row < 0 ? 0 : row);
+                }
+                if (expert) {
                     ui->expert_view = ui->view;
                 }
                 else {
@@ -238,14 +246,6 @@ bool mainui_reap_jobs(MainUIApp *ui)
                 ui->home = false;
             }
             completed.catalog = NULL;
-        }
-        else if (result == JOB_READY && completed.library && kind == JOB_MARKERS) {
-            if (ui->favorites) {
-                mainui_library_close(ui->favorites);
-                free(ui->favorites);
-            }
-            ui->favorites = completed.library;
-            completed.library = NULL;
         }
         else if (result == JOB_READY && completed.library) {
             if (ui->library) {
@@ -284,7 +284,6 @@ bool mainui_reap_jobs(MainUIApp *ui)
         if (result != JOB_WAITING) {
             ui->preview_sync_once = true;
             ui->selected_at = SDL_GetTicks();
-            ui->next_catalog_check = SDL_GetTicks() + 5000;
             ui->cached_start = -1;
             ui->menu_view.cached_start = -1;
             /* Keep the thumbnail LRU across catalog replacements and list entry. */
@@ -300,50 +299,6 @@ bool mainui_reap_jobs(MainUIApp *ui)
         }
         mainui_session_close(&completed);
         mainui_search_close(&found);
-    }
-    if (!ui->catalog_job.thread && !ui->snapshot && !ui->name_input.open && !ui->context_open &&
-        ui->confirmation < 0 && !ui->settings_open &&
-        (Sint32)(SDL_GetTicks() - ui->next_catalog_check) >= 0) {
-        ui->next_catalog_check = SDL_GetTicks() + 5000;
-        if (ui->library && !ui->search.results && mainui_library_changed(ui->library, ui->sd)) {
-            MainUILaunchSource source = {.section = ui->library->recent ? MAINUI_MENU_RECENTS
-                                                                        : MAINUI_MENU_FAVORITES,
-                                         .library = ui->library,
-                                         .view = &ui->view,
-                                         .home = &ui->home_view};
-            mainui_catalog_job_start(&ui->catalog_job, JOB_RELOAD, &source, ui->sd,
-                                     ui->config.case_sensitive, ui->config.rows, NULL,
-                                     ++ui->catalog_generation);
-        }
-        else if (ui->favorites && mainui_library_changed(ui->favorites, ui->sd)) {
-            MainUILaunchSource source = {.section = MAINUI_MENU_FAVORITES};
-            mainui_catalog_job_start(&ui->catalog_job, JOB_MARKERS, &source, ui->sd,
-                                     ui->config.case_sensitive, ui->config.rows, NULL,
-                                     ++ui->catalog_generation);
-        }
-        MainUICatalog *active = ui->apps                                            ? ui->apps
-                                : !ui->home && (!ui->library || ui->search.results) ? ui->catalog
-                                                                                    : NULL;
-        if (active && !active->depth) {
-            active->pages[0].view = ui->apps ? ui->apps_view : ui->view;
-        }
-        if (!ui->catalog_job.thread && active && mainui_catalog_changed(active)) {
-            MainUILaunchSource source = {.section = ui->apps                    ? MAINUI_MENU_APPS
-                                                    : ui->catalog == ui->expert ? MAINUI_MENU_EXPERT
-                                                                                : MAINUI_MENU_GAMES,
-                                         .catalog = active,
-                                         .view = ui->search.results ? &ui->search.source_view
-                                                 : ui->apps         ? &ui->apps_view
-                                                                    : &ui->view,
-                                         .home = &ui->home_view};
-            ui->reload_search = ui->search.results != NULL;
-            mainui_details_close(&ui->details);
-            ui->letter_jump.active = false;
-            mainui_catalog_job_start(&ui->catalog_job, ui->reload_search ? JOB_SEARCH : JOB_RELOAD,
-                                     &source, ui->sd, ui->config.case_sensitive, ui->config.rows,
-                                     ui->reload_search ? ui->search.query : NULL,
-                                     ++ui->catalog_generation);
-        }
     }
     return true;
 }
@@ -432,7 +387,7 @@ static SDL_TimerID add_timer(Uint32 interval)
 }
 
 /* Without the SDL timer, SDL_WaitEvent would block until input arrives and
- * battery, Wi-Fi and catalog checks would stop. Wait on a deadline instead
+ * battery and Wi-Fi checks and idle repaints would stop. Wait on a deadline instead
  * and post the tick ourselves; the timer is retried on the next wait. */
 static void deadline_wait(MainUIApp *ui, SDL_Event *event, int interval)
 {

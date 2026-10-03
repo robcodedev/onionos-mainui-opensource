@@ -346,7 +346,6 @@ static bool visit(MainUICatalogPage *page, const char *sd, const char *name, boo
             entry->raw_rompath = duplicate_text(rompath);
             entry->raw_imgpath = duplicate_text(string(json, "imgpath", "Imgs"));
             entry->config = duplicate_text(scratch->config);
-            entry->config_stamp = mainui_file_stamp(scratch->config);
             entry->shortname = cJSON_IsNumber(shortname) && shortname->valueint != 0;
             entry->launch = duplicate_text(scratch->launch);
             if (!entry->config || !entry->raw_rompath || !entry->raw_imgpath || !entry->launch) {
@@ -508,7 +507,6 @@ static bool scan_directory(MainUICatalogPage *page, const char *sd, int mode, bo
         qsort(page->entries, (size_t)page->count, sizeof *page->entries,
               sensitive ? order_case : order_nocase);
     }
-    page->directory_stamp = mainui_file_stamp(page->path);
     free(scratch);
     return ok;
 }
@@ -570,8 +568,8 @@ bool mainui_catalog_open(MainUICatalog *catalog, const char *sd, bool sensitive)
             break;
         }
         if (result.kind != SCAN_OTHER) {
-            /* Unusable Emu: leave an empty Systems page so startup can continue.
-             * The stamp makes a later change to Emu trigger a normal reload. */
+            /* Unusable Emu: leave an empty Systems page so startup can continue;
+             * opening Games again reads it again. */
             catalog->unreadable = true;
             char title[sizeof page->title], path[sizeof page->path];
             memcpy(title, page->title, sizeof title);
@@ -579,11 +577,9 @@ bool mainui_catalog_open(MainUICatalog *catalog, const char *sd, bool sensitive)
             close_page(page);
             memcpy(page->title, title, sizeof title);
             memcpy(page->path, path, sizeof path);
-            catalog->source_stamp = mainui_file_stamp(page->path);
         }
         return false;
     }
-    catalog->source_stamp = mainui_file_stamp(page->path);
     return true;
 }
 
@@ -612,7 +608,6 @@ static bool optional_catalog(MainUICatalog *catalog, const char *sd, bool sensit
                  directory);
         return false;
     }
-    catalog->source_stamp = mainui_file_stamp(page->path);
     return true;
 }
 
@@ -1426,43 +1421,4 @@ cJSON *mainui_catalog_record(MainUICatalog *catalog, int index)
         return NULL;
     }
     return record;
-}
-
-bool mainui_catalog_changed(MainUICatalog *catalog)
-{
-    if (!catalog) {
-        return false;
-    }
-    if (!mainui_file_stamp_equal(catalog->source_stamp,
-                                 mainui_file_stamp(catalog->pages[0].path))) {
-        return true;
-    }
-    MainUICatalogPage *systems = &catalog->pages[0];
-    int start = systems->view.start, end = systems->view.end;
-    if (start < 0) {
-        start = 0;
-    }
-    if (end >= systems->count) {
-        end = systems->count - 1;
-    }
-    int capacity = !strcmp(systems->title, "Expert") ? 9 : 8;
-    if (end >= start + capacity) {
-        end = start + capacity - 1;
-    }
-    for (int i = start; i <= end; i++) {
-        MainUIEntry *entry = &systems->entries[i];
-        if (entry->config &&
-            !mainui_file_stamp_equal(entry->config_stamp, mainui_file_stamp(entry->config))) {
-            return true;
-        }
-    }
-    for (int i = 1; i <= catalog->depth; i++) {
-        if ((!catalog->pages[i].cache &&
-             !mainui_file_stamp_equal(catalog->pages[i].directory_stamp,
-                                      mainui_file_stamp(catalog->pages[i].path))) ||
-            (catalog->pages[i].cache && mainui_cache_changed(catalog->pages[i].cache))) {
-            return true;
-        }
-    }
-    return false;
 }

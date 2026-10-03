@@ -141,10 +141,8 @@ static void releases_and_focus(MainUIApp *ui)
     event.active.state = SDL_APPINPUTFOCUS;
     assert(mainui_dispatch_event(ui, &event));
     assert(!ui->held[SDLK_HOME] && !ui->letter_jump.active);
-    ui->next_catalog_check = 123;
     event.active.gain = 1;
     assert(mainui_dispatch_event(ui, &event));
-    assert(ui->next_catalog_check == 0);
     event.type = SDL_QUIT;
     assert(mainui_dispatch_event(ui, &event));
     assert(!ui->running);

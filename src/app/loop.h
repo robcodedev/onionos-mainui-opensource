@@ -7,7 +7,7 @@
  * wait reports SDL event failures through ui->status. */
 bool mainui_poll_jobs(MainUIApp *ui);
 bool mainui_reap_jobs(MainUIApp *ui);
-/* Next maintenance/animation wake, including the delayed Loading panel. */
+/* Next status/animation wake, including the delayed Loading panel. */
 int mainui_wait_interval(const MainUIApp *ui, Uint32 now);
 /* A scrolling title is past (or within one frame of) its scroll delay. */
 bool mainui_marquee_moving(const MainUIApp *ui, Uint32 now);

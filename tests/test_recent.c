@@ -8,7 +8,7 @@
 #include <string.h>
 
 /* Select row `index` of Recents or Favorites, snapshot it as a launch or a
- * background reload does, restore, and print the restored selection. */
+ * reload does, restore, and print the restored selection. */
 static int restore(const char *sd, bool recent, int index)
 {
     MainUILibrary *library = calloc(1, sizeof *library);

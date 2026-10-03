@@ -20,4 +20,8 @@ bool mainui_screen_list_key(MainUIApp *ui, SDLKey key);
 bool mainui_screen_search_key(MainUIApp *ui, SDLKey key);
 bool mainui_launch_tool(const char *directory, const char *sd, const MainUILaunchSource *source,
                         const char *label, const char *launch, int type, char error[256]);
+/* Read the Favorite markers (stars, Add or Remove Favorite) again if their
+ * files changed or none are loaded, or always with force. On failure the last
+ * markers stay and the next call tries again. */
+void mainui_markers_refresh(MainUIApp *ui, bool force);
 #endif

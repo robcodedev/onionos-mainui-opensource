@@ -38,7 +38,7 @@ Malformed journals are discarded only when no staging file is found in the conso
 Run `make check-no-hardlinks` for the unprivileged Linux regression and `make check-vfat` in CI with dosfstools and passwordless sudo for loop mounts. The latter unmounts and remounts between injected delete crashes and recovery.
 ## Scan and import failures
 
-Directory scans grow their entry arrays geometrically and reject readdir errors instead of publishing partial catalogs. Emulator configurations allocate only their actual bounded text length; I/O and allocation failures fail discovery instead of silently hiding a console. Missing or malformed configuration files still skip just that system.
+Directory scans grow their entry arrays geometrically and reject readdir errors instead of publishing partial catalogs. Emulator configurations allocate only their actual bounded text length. Running out of memory or file handles fails discovery, keeping the previous screen. A configuration file that is missing, malformed or cannot be read (for example an I/O error) skips just that system, with a log line; opening Games, Expert or Apps again reads it again.
 
 When a missing cache cannot be built, an ordinary console can fall back to directory browsing. This fallback does not bypass a present miyoogamelist.xml, pending delete journal, missing ROM root, or cancellation. Individual XML paths that cannot be normalized or exceed navigation depth are skipped before creating any folder rows. Invalid whole-file XML remains an error.
 

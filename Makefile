@@ -93,7 +93,7 @@ check: check-unit check-integration
 check-unit: $(O)/unit-tests
 	$(O)/unit-tests
 
-check-integration: $(HOST_BIN) $(O)/no-hardlinks.so $(O)/sqlite-ioerr.so
+check-integration: $(HOST_BIN) $(O)/no-hardlinks.so $(O)/sqlite-ioerr.so $(O)/read-fault.so
 	ONION_ROOT='$(ONION_ROOT)' $(PYTHON) tests/integration/run.py --build-dir $(O)
 
 format:
@@ -224,6 +224,10 @@ $(O)/no-hardlinks.so: tests/no_hardlinks.c
 $(O)/sqlite-ioerr.so: tests/sqlite_ioerr.c
 	@mkdir -p $(@D)
 	$(CC) $(STD) $(WARN) -shared -fPIC $< -o $@ -ldl
+
+$(O)/read-fault.so: tests/read_fault.c
+	@mkdir -p $(@D)
+	$(CC) $(STD) $(WARN) -shared -fPIC $< -o $@ -ldl -pthread
 
 check-no-hardlinks: $(HOST_BIN) $(O)/no-hardlinks.so
 	LD_PRELOAD='$(abspath $(O)/no-hardlinks.so)' ONION_ROOT='$(ONION_ROOT)' $(PYTHON) tests/integration/run.py --build-dir $(O) fat_delete persistence favorite_edit

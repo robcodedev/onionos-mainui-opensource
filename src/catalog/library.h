@@ -68,8 +68,10 @@ bool mainui_recent_same(const cJSON *a, const cJSON *b);
  * launcher and label when the ROM is empty. That is used only if exactly one
  * row has it. -1 when not found or ambiguous. */
 int mainui_library_find(const MainUILibrary *library, const cJSON *record);
-/* Initialize a zeroed model; close it even when loading reports failure. */
+/* The files the model was read from changed since. Loading uses it to refuse
+ * a read during which they changed; opening a section, to reread. */
 bool mainui_library_changed(const MainUILibrary *, const char *sd);
+/* Initialize a zeroed model; close it even when loading reports failure. */
 bool mainui_library_open_control(MainUILibrary *, const char *sd, bool recent, MainUICancel);
 bool mainui_library_open(MainUILibrary *library, const char *sd, bool recent);
 /* Exact persistent ROM-path membership, independent of folder or display label. */

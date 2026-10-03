@@ -304,7 +304,6 @@ bool mainui_screen_name_input_key(MainUIApp *ui, const SDL_keysym *key)
                                          .catalog = ui->catalog,
                                          .view = &source_view,
                                          .home = &ui->home_view};
-            ui->reload_search = false;
             ui->search_confirm_held = key->sym == SDLK_RETURN;
             if (!mainui_catalog_job_start(&ui->catalog_job, JOB_SEARCH, &source, ui->sd,
                                           ui->config.case_sensitive, ui->config.rows,
@@ -346,6 +345,29 @@ static bool screen_message_key(MainUIApp *ui, SDLKey key)
     return true;
 }
 
+void mainui_markers_refresh(MainUIApp *ui, bool force)
+{
+    if (!ui->sd || (!force && ui->favorites && !mainui_library_changed(ui->favorites, ui->sd))) {
+        return;
+    }
+    MainUILibrary *fresh = calloc(1, sizeof *fresh);
+    if (!fresh || !mainui_library_open(fresh, ui->sd, false)) {
+        /* The last markers stay; the next entry point tries again. */
+        fprintf(stderr, "Favorite markers unavailable: cannot read Roms/favourite.json\n");
+        if (fresh) {
+            mainui_library_close(fresh);
+        }
+        free(fresh);
+        return;
+    }
+    if (ui->favorites) {
+        mainui_library_close(ui->favorites);
+        free(ui->favorites);
+    }
+    ui->favorites = fresh;
+    ui->cached_start = -1;
+}
+
 static bool screen_confirmation_key(MainUIApp *ui, SDLKey key)
 {
     if (ui->confirmation < 0) {
@@ -374,11 +396,8 @@ static bool screen_confirmation_key(MainUIApp *ui, SDLKey key)
         if (ui->confirmation == CONTEXT_CLEAR_RECENT) {
             ok = mainui_saved_action(ui->sd, true, SAVED_CLEAR, NULL);
         }
-        if (ok && ui->favorites) {
-            if (!mainui_library_reload(ui->favorites, ui->sd)) {
-                mainui_library_close(ui->favorites);
-            }
-            ui->cached_start = -1;
+        if (ok) {
+            mainui_markers_refresh(ui, true);
         }
         if (ok && ui->library && !ui->search.results) {
             ok = mainui_library_reload(ui->library, ui->sd);
@@ -481,11 +500,8 @@ bool mainui_screen_context_menu_key(MainUIApp *ui, SDLKey key, int *requested_se
         if (ok && entry->action == CONTEXT_REMOVE_FAVORITE) {
             mainui_favorite_editor_close(&ui->favorite_editor);
         }
-        if (ok && ui->favorites) {
-            if (!mainui_library_reload(ui->favorites, ui->sd)) {
-                mainui_library_close(ui->favorites);
-            }
-            ui->cached_start = -1;
+        if (ok) {
+            mainui_markers_refresh(ui, true);
         }
         if (ok && ui->library && !ui->search.results) {
             ok = mainui_library_reload(ui->library, ui->sd);
@@ -684,7 +700,8 @@ static bool screen_context_open_key(MainUIApp *ui, SDLKey key)
         }
     }
     /* The patched ROM popup uses exact persistent ROM membership,
-     * including games assigned to a Favorite folder. */
+     * including games assigned to a Favorite folder, read as it is now. */
+    mainui_markers_refresh(ui, false);
     const cJSON *rom = cJSON_GetObjectItemCaseSensitive(ui->context_record, "rompath");
     if (cJSON_IsString(rom) && mainui_library_contains(ui->favorites, rom->valuestring)) {
         for (int i = 0; i < ui->context.count; i++) {
@@ -714,16 +731,29 @@ bool mainui_screen_home_key(MainUIApp *ui, SDLKey key, int requested_section)
         MainUIMenuSection section = requested_section >= 0
                                         ? (MainUIMenuSection)requested_section
                                         : ui->menu.sections[ui->home_view.selected];
+        /* Opening a section reads it again, so changes made outside MainUI
+         * show up here; nothing is watched while a screen stays open. */
+        mainui_markers_refresh(ui, false);
+        if ((section == MAINUI_MENU_GAMES || section == MAINUI_MENU_EXPERT) && ui->sd) {
+            MainUICatalog *previous = section == MAINUI_MENU_GAMES ? ui->games : ui->expert;
+            MainUIViewport *saved =
+                section == MAINUI_MENU_GAMES ? &ui->games_view : &ui->expert_view;
+            if (previous && previous->depth) {
+                *saved = previous->pages[0].view; /* left from a ROM list */
+            }
+            ui->launch_source.section = section;
+            if (!mainui_catalog_job_start(&ui->catalog_job, JOB_DISCOVER, &ui->launch_source,
+                                          ui->sd, ui->config.case_sensitive, ui->config.rows, NULL,
+                                          ++ui->catalog_generation)) {
+                snprintf(ui->message_title, sizeof ui->message_title, "%s unavailable",
+                         section == MAINUI_MENU_GAMES ? "Games" : "Expert");
+                snprintf(ui->message_body, sizeof ui->message_body, "Cannot start discovery.");
+            }
+            return true;
+        }
         if (section == MAINUI_MENU_GAMES || section == MAINUI_MENU_EXPERT) {
-            if (section == MAINUI_MENU_EXPERT && (!ui->expert || !ui->expert->pages[0].count)) {
-                ui->launch_source.section = section;
-                if (!mainui_catalog_job_start(&ui->catalog_job, JOB_DISCOVER, &ui->launch_source,
-                                              ui->sd, ui->config.case_sensitive, ui->config.rows,
-                                              NULL, ++ui->catalog_generation)) {
-                    snprintf(ui->message_title, sizeof ui->message_title, "Expert unavailable");
-                    snprintf(ui->message_body, sizeof ui->message_body, "Cannot start discovery.");
-                }
-                return true;
+            if (!(section == MAINUI_MENU_GAMES ? ui->games : ui->expert)) {
+                return true; /* no SD card to discover from */
             }
             ui->catalog = section == MAINUI_MENU_GAMES ? ui->games : ui->expert;
             MainUIViewport saved = ui->catalog->depth             ? ui->catalog->pages[0].view
@@ -1107,7 +1137,6 @@ static void dispatch_key(MainUIApp *ui, SDL_Event *event)
     }
     if (key == SDLK_F2 && !ui->settings_open && !ui->language_open && !ui->home && !ui->library &&
         ui->catalog) {
-        ui->reload_search = false;
         mainui_catalog_job_start(&ui->catalog_job, JOB_RELOAD, &ui->launch_source, ui->sd,
                                  ui->config.case_sensitive, ui->config.rows, NULL,
                                  ++ui->catalog_generation);
@@ -1141,9 +1170,6 @@ bool mainui_dispatch_event(MainUIApp *ui, SDL_Event *event)
     }
     if (event->type == SDL_QUIT) {
         ui->running = false;
-    }
-    if (event->type == SDL_ACTIVEEVENT && event->active.gain) {
-        ui->next_catalog_check = 0;
     }
     if (event->type == SDL_ACTIVEEVENT && !event->active.gain &&
         (event->active.state & SDL_APPINPUTFOCUS)) {
