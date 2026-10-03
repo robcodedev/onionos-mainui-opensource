@@ -263,19 +263,25 @@ bool mainui_screen_name_input_key(MainUIApp *ui, const SDL_keysym *key)
                 }
                 bool connect =
                     ui->settings_keyboard == 2 && ui->settings_page.connect_after_password;
+                /* The keyboard closes only once the connection is under way
+                 * or queued; a refused request keeps the password typed. */
+                if (connect && ui->settings_page.wifi && ui->device_enabled) {
+                    bool busy = ui->device_job.thread != NULL;
+                    if (!mainui_device_job_start(&ui->device_job, &ui->device_adapter, 3,
+                                                 ui->settings_page.ssid,
+                                                 ui->settings_page.password)) {
+                        memset(ui->settings_page.password, 0, sizeof ui->settings_page.password);
+                        snprintf(ui->name_input.error, sizeof ui->name_input.error, "%s",
+                                 busy ? "Wi-Fi is busy. Try again when it finishes."
+                                      : "Cannot start connecting.");
+                        return true;
+                    }
+                    ui->settings_page.message[0] = 0;
+                    memset(ui->settings_page.password, 0, sizeof ui->settings_page.password);
+                }
                 ui->settings_page.connect_after_password = false;
                 mainui_name_input_close(&ui->name_input);
                 ui->settings_keyboard = 0;
-                if (connect) {
-                    bool started =
-                        ui->settings_page.wifi && ui->device_enabled &&
-                        mainui_device_job_start(&ui->device_job, &ui->device_adapter, 3,
-                                                ui->settings_page.ssid, ui->settings_page.password);
-                    ui->settings_page.message[0] = 0;
-                    if (started) {
-                        memset(ui->settings_page.password, 0, sizeof ui->settings_page.password);
-                    }
-                }
             }
             else {
                 snprintf(ui->name_input.error, sizeof ui->name_input.error, "%s",
@@ -438,14 +444,18 @@ bool mainui_screen_settings_page_key(MainUIApp *ui, SDLKey key)
         mainui_device_settings_changed(&ui->device_adapter);
     }
     if (ui->settings_keyboard >= 3) {
+        bool busy = ui->device_job.thread != NULL;
         bool started =
             (ui->settings_page.wifi || ui->settings_keyboard == 6) &&
             mainui_device_job_start(&ui->device_job, &ui->device_adapter, ui->settings_keyboard,
                                     ui->settings_page.ssid, ui->settings_page.password);
-        snprintf(ui->settings_page.message, sizeof ui->settings_page.message, "%s",
-                 started && (ui->settings_keyboard == 4 || ui->settings_keyboard == 5)
-                     ? "Scanning..."
-                     : "");
+        /* A connection that was not accepted says so (an open network). */
+        snprintf(
+            ui->settings_page.message, sizeof ui->settings_page.message, "%s",
+            started && (ui->settings_keyboard == 4 || ui->settings_keyboard == 5) ? "Scanning..."
+            : !started && ui->settings_keyboard == 3 && ui->settings_page.wifi
+                ? (busy ? "Wi-Fi is busy. Try again when it finishes." : "Cannot start connecting.")
+                : "");
         if (started) {
             memset(ui->settings_page.password, 0, sizeof ui->settings_page.password);
         }

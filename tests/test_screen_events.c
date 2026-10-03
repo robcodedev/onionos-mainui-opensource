@@ -122,6 +122,26 @@ static void keyboard_priority(MainUIApp *ui)
     assert(key_event(ui, SDL_KEYDOWN, SDLK_ESCAPE, 0));
     assert(!ui->name_input.open && !ui->settings_keyboard);
     assert(!ui->settings_page.connect_after_password && ui->settings_page.open);
+
+    /* While another connection runs, a submitted password is not accepted:
+     * the keyboard stays open with it and says why (F5). */
+    ui->device_enabled = true;
+    ui->settings_page.wifi = 1;
+    ui->settings_keyboard = 2;
+    ui->name_input.open = true;
+    ui->settings_page.connect_after_password = true;
+    strcpy(ui->name_input.text, "password123");
+    ui->device_job.thread = (SDL_Thread *)ui;
+    ui->device_job.operation = 3;
+    assert(key_event(ui, SDL_KEYDOWN, SDLK_F2, 0));
+    assert(ui->name_input.open && ui->settings_keyboard == 2);
+    assert(ui->settings_page.connect_after_password && strstr(ui->name_input.error, "busy"));
+    assert(!strcmp(ui->name_input.text, "password123") && !ui->device_job.queued_operation);
+    ui->device_job.thread = NULL;
+    ui->device_job.operation = 0;
+    ui->device_enabled = false;
+    assert(key_event(ui, SDL_KEYDOWN, SDLK_ESCAPE, 0));
+    assert(!ui->name_input.open && !ui->settings_keyboard);
 }
 
 static void releases_and_focus(MainUIApp *ui)
