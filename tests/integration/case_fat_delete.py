@@ -193,6 +193,37 @@ for phase, refresh in (("delete-moved", "cache"), ("delete-committed", "remove-c
     staged.unlink()  # the extra copy is the user's to keep or remove
     check(False)
 
+# A folder flush that fails after the journal is gone does not fail Refresh roms
+# (review of 1.0.2, finding 4); a journal that cannot be removed still does.
+for refresh in ("cache", "remove-cache"):
+    prepare()
+    require("delete", 77, "delete-committed")
+    staged = Path(json.loads(journal.read_text())["staged"])
+    rom.write_bytes(b"new payload")
+    env = dict(ENV, MAINUI_TEST_SYNC_FAILURE=journal.name)
+    result = subprocess.run([str(PROBE), refresh, str(SD)], env=env, capture_output=True,
+                            text=True, timeout=5)
+    assert result.returncode == 0, (refresh, result.stdout, result.stderr)
+    assert "flushing its folder failed" in result.stderr, result.stderr
+    assert not journal.exists()
+    assert rom.read_bytes() == b"new payload" and staged.read_bytes() == b"ROM payload"
+    staged.unlink()
+    rom.unlink()
+if not os.environ.get("MAINUI_FAT_ROOT") and os.geteuid() != 0:
+    prepare()
+    require("delete", 77, "delete-committed")
+    staged = Path(json.loads(journal.read_text())["staged"])
+    rom.write_bytes(b"new payload")
+    cache.parent.chmod(0o555)
+    try:
+        assert run("cache").returncode == 3
+    finally:
+        cache.parent.chmod(0o755)
+    assert journal.exists()
+    require("cache")
+    staged.unlink()
+    rom.unlink()
+
 # A journal left without its cache is still dropped by Refresh roms from the selector.
 prepare()
 require("delete", 77, "delete-committed")

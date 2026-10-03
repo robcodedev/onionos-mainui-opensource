@@ -349,13 +349,19 @@ bool mainui_delete_abandon(const char *cache, const char *sd)
         return errno == ENOENT;
     }
     const char *kind = pending_file(journal, sd, pending);
-    if (mainui_remove_file(journal) != 0 && errno != ENOENT) {
-        fprintf(stderr, "Cannot drop ROM deletion journal %s: %s\n", journal, strerror(errno));
-        return false;
+    bool removed = false;
+    if (mainui_remove_file_status(journal, &removed) != 0) {
+        if (!removed && errno != ENOENT) {
+            fprintf(stderr, "Cannot drop ROM deletion journal %s: %s\n", journal, strerror(errno));
+            return false;
+        }
+        /* Best effort: if the removal is lost in a power cut, the journal
+         * simply blocks Delete again until the next Refresh roms. */
+        if (removed) {
+            fprintf(stderr, "Dropped ROM deletion journal %s, but flushing its folder failed: %s\n",
+                    journal, strerror(errno));
+        }
     }
-    /* Best effort: if the removal is lost in a power cut, the journal simply
-     * blocks Delete again until the next Refresh roms. */
-    mainui_sync_parent(journal);
     fprintf(stderr,
             "Refresh roms dropped pending ROM deletion journal %s; ROM files left untouched. "
             "Check the %s: %s\n",
