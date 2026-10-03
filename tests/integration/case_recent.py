@@ -98,4 +98,46 @@ assert read() == [b]
 write([b, searched])
 remove(1)
 assert read() == [b]
+
+# Restoring a selection (after a launch, or a background reload of the list)
+# finds the selected entry by the list's own identity (review of 1.0.3).
+def restored(section, index):
+    result = subprocess.run([str(BUILD / "fixture-recent"), str(sd), "restore", section,
+                             str(index)], check=True, timeout=20, capture_output=True, text=True)
+    return int(result.stdout)
+
+write([a, b])
+assert [restored("recents", i) for i in range(2)] == [0, 1]
+write([b, searched])  # Search's spelling of A's launcher stays distinct from B
+assert [restored("recents", i) for i in range(2)] == [0, 1]
+
+favourites = sd / "Roms/favourite.json"
+saved_favourites = favourites.read_bytes() if favourites.exists() else None
+sidecar = sd / "Roms/favourite-folders.json"
+saved_sidecar = sidecar.read_bytes() if sidecar.exists() else None
+# Two Favorites without a ROM (apps), told apart by launcher and label.
+apps = [dict(label=f"App {i}", rompath="", launch=f"/mnt/SDCARD/App/a{i}/launch.sh", type=5)
+        for i in range(2)]
+favourites.write_text("".join(json.dumps(app) + "\n" for app in apps), encoding="utf-8")
+sidecar.unlink(missing_ok=True)
+assert [restored("favorites", i) for i in range(2)] == [0, 1]
+# One ROM as two Favorites (different label and launcher): both are listed,
+# and each restores to its own row.
+same = [dict(label=label, rompath="/mnt/SDCARD/Roms/FC/same.nes",
+             launch=f"/mnt/SDCARD/Emu/{emu}/launch.sh", type=5)
+        for label, emu in (("Label A", "FC-A"), ("Label B", "FC-B"))]
+favourites.write_text("".join(json.dumps(game) + "\n" for game in same), encoding="utf-8")
+assert [restored("favorites", i) for i in range(2)] == [0, 1]
+# A selected folder keeps its place even when an empty-ROM Favorite is listed.
+favourites.write_text("".join(json.dumps(app) + "\n" for app in apps), encoding="utf-8")
+sidecar.write_text(json.dumps(dict(schema=1, generation=0)) + "\n" +
+                   json.dumps(dict(kind="folder", id="f", parent="", name="Folder",
+                                   order=0)) + "\n", encoding="utf-8")
+assert restored("favorites", 0) == 0  # Folder, then App 0, App 1
+assert restored("favorites", 2) == 2
+for path, saved in ((favourites, saved_favourites), (sidecar, saved_sidecar)):
+    if saved is None:
+        path.unlink(missing_ok=True)
+    else:
+        path.write_bytes(saved)
 print("Recent writer scenarios passed")

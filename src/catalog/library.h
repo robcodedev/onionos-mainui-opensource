@@ -52,6 +52,13 @@ typedef struct {
 MainUIRecentIdentity mainui_recent_identity(const cJSON *record);
 /* Same effective launcher and ROM, as Recents shows and removes them. */
 bool mainui_recent_same(const cJSON *a, const cJSON *b);
+/* The visible row holding the entry `record` names, for restoring a selection.
+ * Favorites first match type, launcher, ROM and label exactly, since one ROM
+ * can be listed under several labels. Then the reader's identity: launcher and
+ * ROM for Recents (Search's prefix normalized); for Favorites the ROM, or type,
+ * launcher and label when the ROM is empty. That is used only if exactly one
+ * row has it. -1 when not found or ambiguous. */
+int mainui_library_find(const MainUILibrary *library, const cJSON *record);
 /* Initialize a zeroed model; close it even when loading reports failure. */
 bool mainui_library_changed(const MainUILibrary *, const char *sd);
 bool mainui_library_open_control(MainUILibrary *, const char *sd, bool recent, MainUICancel);

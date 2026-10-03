@@ -43,16 +43,6 @@ static cJSON *next_record(char **cursor)
     return cJSON_ParseWithOpts(line, NULL, true);
 }
 
-static char *identity(const char *launch, const char *rom)
-{
-    size_t size = strlen(launch) + strlen(rom) + 2;
-    char *key = malloc(size);
-    if (key) {
-        snprintf(key, size, "%s\n%s", launch, rom);
-    }
-    return key;
-}
-
 MainUIRecentIdentity mainui_recent_identity(const cJSON *record)
 {
     const char *rom = string(record, "rompath"), *launch = string(record, "launch");
@@ -71,6 +61,68 @@ bool mainui_recent_same(const cJSON *a, const cJSON *b)
     MainUIRecentIdentity left = mainui_recent_identity(a), right = mainui_recent_identity(b);
     return left.launch_length == right.launch_length &&
            !memcmp(left.launch, right.launch, left.launch_length) && !strcmp(left.rom, right.rom);
+}
+
+/* An entry's identity; see mainui_library_find(). Owned by the caller. */
+static char *record_key(const MainUILibrary *library, const cJSON *json)
+{
+    if (library->recent) {
+        MainUIRecentIdentity effective = mainui_recent_identity(json);
+        size_t size = effective.launch_length + strlen(effective.rom) + 2;
+        char *key = malloc(size);
+        if (key) {
+            snprintf(key, size, "%.*s\n%s", (int)effective.launch_length, effective.launch,
+                     effective.rom);
+        }
+        return key;
+    }
+    const char *rom = string(json, "rompath"), *launch = string(json, "launch");
+    const char *label = string(json, "label");
+    size_t size = *rom ? strlen(rom) + 1 : strlen(launch) + strlen(label) + 32;
+    char *key = malloc(size);
+    if (key) {
+        if (*rom) {
+            snprintf(key, size, "%s", rom);
+        }
+        else {
+            snprintf(key, size, "%d|%s|%s", number(json, "type", 5), launch, label);
+        }
+    }
+    return key;
+}
+
+int mainui_library_find(const MainUILibrary *library, const cJSON *record)
+{
+    if (!record) {
+        return -1;
+    }
+    /* Favorites list one ROM more than once when the labels differ, and those
+     * rows share an identity. Prefer the row the record describes exactly. */
+    if (!library->recent) {
+        const char *label = string(record, "label"), *rom = string(record, "rompath");
+        const char *launch = string(record, "launch");
+        int type = number(record, "type", 5);
+        for (int row = 0; row < library->visible_count; row++) {
+            int index = library->visible[row];
+            const MainUILibraryItem *item = index >= 0 ? &library->items[index] : NULL;
+            if (item && item->type == type && !strcmp(item->label, label) &&
+                !strcmp(item->rom, rom) && !strcmp(item->launch, launch)) {
+                return row;
+            }
+        }
+    }
+    /* Otherwise by identity, but only if it names exactly one row: with several,
+     * keeping the remembered position beats guessing between them. */
+    char *key = record_key(library, record);
+    int found = -1, matches = 0;
+    for (int row = 0; key && row < library->visible_count; row++) {
+        int index = library->visible[row];
+        if (index >= 0 && !strcmp(key, library->items[index].identity) && !matches++) {
+            found = row;
+        }
+    }
+    free(key);
+    return matches == 1 ? found : -1;
 }
 
 static bool add_record(MainUILibrary *library, cJSON *json)
@@ -113,22 +165,7 @@ static bool add_record(MainUILibrary *library, cJSON *json)
         launch = string(json, "launch");
         rom = string(json, "rompath");
     }
-    char *key = NULL;
-    if (library->recent) {
-        key = identity(launch, rom);
-    }
-    else {
-        size_t size = *rom ? strlen(rom) + 1 : strlen(launch) + strlen(label) + 32;
-        key = malloc(size);
-        if (key) {
-            if (*rom) {
-                snprintf(key, size, "%s", rom);
-            }
-            else {
-                snprintf(key, size, "%d|%s|%s", type, launch, label);
-            }
-        }
-    }
+    char *key = record_key(library, json);
     if (!key) {
         cJSON_Delete(json);
         return false;

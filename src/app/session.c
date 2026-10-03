@@ -257,13 +257,12 @@ bool mainui_session_restore_control(MainUISession *out, const char *sd, bool sen
         }
         if (ok) {
             restore_view(&pending.view, pending.library->visible_count, rows, &selected_view);
-            const char *rom = string(record, "rompath");
-            for (int row = 0; row < pending.library->visible_count; row++) {
-                int index = pending.library->visible[row];
-                if (index >= 0 && !strcmp(rom, pending.library->items[index].rom)) {
-                    mainui_viewport_move(&pending.view, rows, row - pending.view.selected, false);
-                    break;
-                }
+            /* Find the selected entry by the list's own identity, so two
+             * Recents of one ROM or two Favorites without a ROM stay apart.
+             * Without a record (a folder was selected) the position stands. */
+            int row = mainui_library_find(pending.library, record);
+            if (row >= 0) {
+                mainui_viewport_move(&pending.view, rows, row - pending.view.selected, false);
             }
         }
     }
