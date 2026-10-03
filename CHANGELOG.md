@@ -12,7 +12,7 @@
 * Idle CPU use is lower: static screens are no longer redrawn every 500 ms when nothing on them has changed (#9).
 * Cover images are scaled on the background decoder, so scrolling and opening lists no longer do this work on the UI thread (#8).
 * Scrolling titles are much cheaper: only the selected row is redrawn and sent to the display, instead of the whole screen.
-* Scrolling titles move smoothly: frames are paced on even 40 ms intervals with a constant whole-pixel step, and no longer pause for periodic full-screen repaints or Wi-Fi status checks. The `.romListTitleScroll` speed is rounded to a whole number of pixels per frame, that is to a multiple of 25 px/s (for example 120 px/s scrolls at 125 px/s); speeds below 25 px/s stay exact.
+* Scrolling titles move smoothly: frames are paced on even 40 ms intervals with a constant whole-pixel step, and no longer pause for periodic full-screen repaints or Wi-Fi status checks. The `.romListTitleScroll` speed is rounded to a whole number of pixels per frame, that is to a multiple of 25 px/s (for example 120 px/s scrolls at 125 px/s). Below 25 px/s only 5, 6.25, 8.33 and 12.5 px/s are possible (for example 20 px/s scrolls at 25 px/s and 15 px/s at 12.5 px/s); see [docs/TIMING.md](docs/TIMING.md). This entry first said slow speeds stay exact.
 
 ### Other
 

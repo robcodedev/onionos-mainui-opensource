@@ -80,6 +80,15 @@ int mainui_suite_core(void)
     /* Slow speeds move one pixel every k frames: 5 px/s is one pixel per 200 ms. */
     CHECK(mainui_marquee_pixels(199, 5) == 0 && mainui_marquee_pixels(200, 5) == 1);
     CHECK(mainui_marquee_pixels(1000, 5) == 5 && mainui_marquee_pixels(1000, 0) == 0);
+    /* Other slow speeds are quantized, as docs/TIMING.md lists: 20 px/s runs
+     * at 25, 15 at 12.5, 10 at 8.33 and 7 at 6.25 px/s (12 s of frames). */
+    CHECK(mainui_marquee_pixels(12000, 20) == 300 && mainui_marquee_pixels(12000, 15) == 150);
+    CHECK(mainui_marquee_pixels(12000, 10) == 100 && mainui_marquee_pixels(12000, 7) == 75);
+    int exact = 0;
+    for (int speed = 5; speed <= 400; ++speed) {
+        exact += mainui_marquee_pixels(12000, speed) == (uint64_t)speed * 12;
+    }
+    CHECK(exact == 17);
     for (int speed = 5; speed <= 400; ++speed) {
         uint64_t step = mainui_marquee_pixels(MAINUI_MARQUEE_FRAME_MS, speed);
         for (uint64_t frame = 1; frame < 200; ++frame) {

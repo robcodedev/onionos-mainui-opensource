@@ -61,13 +61,19 @@ session, including navigation, so use the same entry and exit steps. Compare
 cache-build-ms and scan-ms for Refresh roms too; if it takes longer than 60 seconds,
 let it finish and record the actual session duration.
 
-While a title scrolls, frames are paced on fixed 40 ms deadlines (four 10 ms
-kernel ticks) and the title moves one whole-pixel step per frame. This departs
-from exact `.romListTitleScroll` speed parity on purpose: the configured speed is
-rounded to a whole number of pixels per 40 ms frame, i.e. to a multiple of
-25 px/s (120 px/s scrolls at 125 px/s). Speeds below 25 px/s move one pixel
-every few frames instead (5 px/s stays exact). An averaging step would keep the
-exact speed but bring back uneven motion. During the scroll delay (up to 30 s)
+While a title scrolls, frames are paced on fixed 40 ms deadlines (four 10 ms kernel ticks) and the title moves one whole-pixel step per frame. This departs from exact `.romListTitleScroll` speed parity on purpose: an averaging step would keep the exact speed but bring back uneven motion. From 25 px/s up, the configured speed is rounded to a whole number of pixels per frame, that is to a multiple of 25 px/s (120 px/s scrolls at 125 px/s). Below that, the title moves one pixel every 2, 3, 4 or 5 frames, so only five slow speeds exist. Of the 396 accepted speeds (5 to 400 px/s), the 17 exact ones are 5 px/s and the multiples of 25.
+
+| Configured px/s | Actual px/s | Motion |
+| --- | --- | --- |
+| 5 | 5 | 1 px every 5 frames |
+| 6-7 | 6.25 | 1 px every 4 frames |
+| 8-10 | 8.33 | 1 px every 3 frames |
+| 11-16 | 12.5 | 1 px every 2 frames |
+| 17-37 | 25 | 1 px per frame |
+| 38-62 | 50 | 2 px per frame |
+| 25n - 12 to 25n + 12 | 25n | n px per frame, up to 400 px/s (16 px) |
+
+During the scroll delay (up to 30 s)
 the normal maintenance ticks continue; the loop wakes when the title starts to
 move and only then switches to paced frames. Letter-jump work retains 17 ms wakes. Workers wake the UI
 on completion, and catalog work has a wake scheduled for the 500 ms Loading panel
