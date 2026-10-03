@@ -55,6 +55,7 @@
 * A Recents list with an unreadable line can be cleared again, and new games are added to it again; the damaged original is kept once as `recentlist.json.damaged`.
 * ROM-list positions are saved again after `romwinidx.json` was damaged with zero bytes; the damaged file is kept as `romwinidx.json.bad`.
 * A damaged launch-return file (`mainui-return.json` with zero bytes, or over 256 KiB) no longer blocks every later game launch until a reboot. When no launch is pending, it is moved aside as `mainui-return.json.bad` and MainUI starts at the main menu.
+* Refresh roms, and the automatic repair of an unreadable list, only change the console they were started for. If it can no longer be found (its configuration removed or unreadable), they stop with a message instead of clearing the cache, and any unfinished deletion, of the console selected in its place.
 * Refresh roms no longer reports a failure when it dropped a refused deletion journal but flushing the folder afterwards failed.
 
 ### Device and system

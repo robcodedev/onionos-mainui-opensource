@@ -264,10 +264,87 @@ static void thumbnail_cache(const char *sd)
     free(catalog);
 }
 
+/* Refresh and repair touch only the console they were started for: when it
+ * cannot be found again (config gone, or one read error), restoration falls
+ * back to the grid, where console B is selected now, and B's cache, its
+ * unfinished deletion and its ROMs stay as they are (rebuild review R1). */
+static int target(const char *sd)
+{
+    char config[4096], moved[4096], cache[4096], journal[4096], staged[4096], control[4096];
+    snprintf(config, sizeof config, "%s/Emu/A/config.json", sd);
+    snprintf(moved, sizeof moved, "%s/Emu/A/config.json.away", sd);
+    snprintf(cache, sizeof cache, "%s/Roms/B/B_cache6.db", sd);
+    snprintf(journal, sizeof journal, "%s/Roms/B/B_cache6.db.delete.json", sd);
+    snprintf(staged, sizeof staged, "%s/Roms/B/b0.nes.mainui-delete", sd);
+    snprintf(control, sizeof control, "%s/fault", sd);
+    MainUICatalog *catalog = calloc(1, sizeof *catalog);
+    assert(catalog && mainui_catalog_open(catalog, sd, false) && catalog->pages[0].count == 2);
+    MainUIViewport view, home = {1, 0, 0, 0};
+    MainUICatalogJob job = {0};
+    MainUISession b = {0}, a = {0}, result = {0};
+    uint64_t generation = 1;
+    /* Build B's cache by opening it, then leave a deletion it cannot recover. */
+    mainui_grid_restore(&view, 2, 1, 4, 2);
+    MainUILaunchSource source = {
+        .section = MAINUI_MENU_GAMES, .catalog = catalog, .view = &view, .home = &home};
+    assert(mainui_catalog_job_start(&job, JOB_ENTER, &source, sd, false, 6, NULL, generation));
+    assert(wait_job(&job, generation++, &b) == JOB_READY && b.catalog->depth == 1);
+    mainui_session_close(&b);
+    assert(mainui_write_text_atomic(journal, "{"));
+    assert(mainui_write_text_atomic(staged, "rom"));
+    unsigned before = hash_file(cache);
+    mainui_grid_restore(&view, 2, 0, 4, 2);
+    assert(mainui_catalog_job_start(&job, JOB_ENTER, &source, sd, false, 6, NULL, generation));
+    assert(wait_job(&job, generation++, &a) == JOB_READY && a.catalog->depth == 1);
+    for (int fault = 0; fault < 4; fault++) {
+        /* 0-1: A's config gone; 2: one read error on it; 3: gone, refresh
+         * asked for on the grid with A selected. */
+        if (fault < 2 || fault == 3) {
+            assert(rename(config, moved) == 0);
+        }
+        else {
+            FILE *file = fopen(control, "w");
+            assert(file && fputs("Emu/A/config.json eio", file) >= 0 && !fclose(file));
+        }
+        MainUILaunchSource from = {.section = MAINUI_MENU_GAMES,
+                                   .catalog = fault == 3 ? catalog : a.catalog,
+                                   .view = fault == 3 ? &view : &a.view,
+                                   .home = &home};
+        MainUIJobKind kind = fault == 1 || fault == 3 ? JOB_REFRESH_SYSTEM : JOB_REPAIR_SYSTEM;
+        assert(mainui_catalog_job_start(&job, kind, &from, sd, false, 6, NULL, generation));
+        assert(wait_job(&job, generation++, &result) == JOB_FAILED && !result.catalog);
+        assert(hash_file(cache) == before && mainui_file_stamp(journal).exists &&
+               mainui_file_stamp(staged).exists);
+        if (fault == 2) {
+            assert(!mainui_file_stamp(control).exists); /* the read error happened */
+        }
+        else {
+            assert(rename(moved, config) == 0);
+        }
+    }
+    /* With A found again, its repair works and B is still untouched. */
+    MainUILaunchSource from = {
+        .section = MAINUI_MENU_GAMES, .catalog = a.catalog, .view = &a.view, .home = &home};
+    assert(
+        mainui_catalog_job_start(&job, JOB_REPAIR_SYSTEM, &from, sd, false, 6, NULL, generation));
+    assert(wait_job(&job, generation, &result) == JOB_READY && result.catalog->depth == 1);
+    assert(hash_file(cache) == before && mainui_file_stamp(journal).exists);
+    mainui_session_close(&result);
+    mainui_session_close(&a);
+    mainui_catalog_close(catalog);
+    free(catalog);
+    SDL_Quit();
+    puts("Refresh and repair leave other consoles alone when theirs is gone");
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
-    assert(argc == 2 && SDL_Init(SDL_INIT_TIMER) == 0);
+    assert((argc == 2 || argc == 3) && SDL_Init(SDL_INIT_TIMER) == 0);
     const char *sd = argv[1];
+    if (argc == 3 && !strcmp(argv[2], "target")) {
+        return target(sd);
+    }
     cover_scaled_in_worker(sd);
     thumbnail_cache(sd);
     MainUICatalog *catalog = calloc(1, sizeof *catalog);

@@ -32,6 +32,10 @@ typedef struct {
     bool sensitive, success;
     int rows;
     char sd[4096], query[128], error[256];
+    /* Refresh and repair: the console they were started for (its config
+     * file), and whether from inside its ROM list. */
+    char target[4096];
+    bool target_list;
     cJSON *resume, *record;
     MainUISession session;
     MainUISearch search;

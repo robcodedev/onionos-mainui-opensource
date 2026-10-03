@@ -50,6 +50,19 @@ static int work(void *context)
             MainUICatalog *catalog = job->session.catalog;
             bool in_list = catalog && catalog->depth > 0;
             int system = in_list ? catalog->pages[0].view.selected : job->session.view.selected;
+            /* Only the console the job was started for. If it could not be
+             * found again (gone, or its config unreadable), restoration falls
+             * back to the grid, where another console is selected now: that
+             * one must not be touched. */
+            const MainUIEntry *entry = catalog && system >= 0 && system < catalog->pages[0].count
+                                           ? &catalog->pages[0].entries[system]
+                                           : NULL;
+            if (!entry || !entry->config || strcmp(entry->config, job->target) ||
+                in_list != job->target_list) {
+                snprintf(job->error, sizeof job->error, "%s",
+                         "This console cannot be found now. Open Games again.");
+                catalog = NULL;
+            }
             /* From the selector, invalidate only; normal entry rebuilds on demand.
              * In a ROM list, rebuild the console root even from a nested folder,
              * then restore against the published cache. */
@@ -155,6 +168,17 @@ bool mainui_catalog_job_start(MainUICatalogJob *job, MainUIJobKind kind,
         }
     }
     if ((kind == JOB_REFRESH_SYSTEM || kind == JOB_REPAIR_SYSTEM) && source->catalog) {
+        const MainUICatalog *catalog = source->catalog;
+        int index = catalog->depth ? catalog->pages[0].view.selected : source->view->selected;
+        const MainUIEntry *entry = index >= 0 && index < catalog->pages[0].count
+                                       ? &catalog->pages[0].entries[index]
+                                       : NULL;
+        if (!entry || !entry->config) {
+            mainui_catalog_job_close(job);
+            return false;
+        }
+        snprintf(job->target, sizeof job->target, "%s", entry->config);
+        job->target_list = catalog->depth > 0;
         job->suspended_catalog = source->catalog;
         for (int i = 1; i <= source->catalog->depth; i++) {
             mainui_cache_suspend(source->catalog->pages[i].cache);

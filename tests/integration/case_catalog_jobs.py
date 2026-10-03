@@ -2,6 +2,7 @@
 """Qualify cancellable catalog jobs and coherent external edits on isolated data."""
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -25,6 +26,26 @@ subprocess.run([str(BUILD / "fixture-catalog_job"), str(SD)], check=True, timeou
 # Use a fresh scan cache for the same native selection/order fixture.
 (SD / "Roms/Host/Host_cache6.db").unlink()
 subprocess.run([str(BUILD / "fixture-catalog_job"), str(SD)], check=True, timeout=30)
+# Two consoles; refresh and repair of A must never touch B when A cannot be
+# found again (read-fault.so makes one config read fail on request).
+TARGET = SD.parent / "target-sd"
+shutil.rmtree(TARGET, ignore_errors=True)
+for name in ("A", "B"):
+    (TARGET / f"Emu/{name}").mkdir(parents=True)
+    (TARGET / f"Emu/{name}/config.json").write_text(json.dumps(dict(
+        label=name, rompath=f"../../Roms/{name}", launch="launch.sh", extlist="nes")))
+    (TARGET / f"Roms/{name}").mkdir(parents=True)
+    for i in range(3):
+        (TARGET / f"Roms/{name}/{name.lower()}{i}.nes").write_bytes(b"rom")
+libraries = subprocess.run(["ldd", str(BUILD / "fixture-catalog_job")], check=True,
+                           capture_output=True, text=True).stdout
+asan = next((line.split("=>", 1)[1].split()[0] for line in libraries.splitlines()
+             if "libasan.so" in line), "")
+subprocess.run([str(BUILD / "fixture-catalog_job"), str(TARGET), "target"], check=True,
+               timeout=30, env=dict(os.environ, MAINUI_READ_FAULT=str(TARGET / "fault"),
+                                    LD_PRELOAD=" ".join(filter(None, (
+                                        asan, os.environ.get("LD_PRELOAD"),
+                                        str(BUILD / "read-fault.so"))))))
 (SD / ".tmp_update/config").mkdir(parents=True)
 (SD / ".tmp_update/config/main-menu.json").write_text('{"menu":{"games":true}}')
 
