@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "catalog/favorite_store.h"
 #include "catalog/favorite_edit.h"
+#include "catalog/saved_actions.h"
 #include "platform/files.h"
 #include <errno.h>
 #include <limits.h>
@@ -461,6 +462,64 @@ static bool forget_assignment_unlocked(const char *sd, const cJSON *removed)
     free(original);
     free(output);
     cJSON_Delete(records);
+    return ok;
+}
+
+/* A Favorite with the assignment key and type of `removed` is still listed. */
+static bool assignment_still_used(const char *sd, const cJSON *removed, bool *used)
+{
+    char path[4096];
+    int n = snprintf(path, sizeof path, "%s/Roms/favourite.json", sd);
+    if (n < 0 || n >= (int)sizeof path) {
+        return false;
+    }
+    char *input = mainui_read_text(path, 8 * 1024 * 1024);
+    if (!input) {
+        *used = false;
+        return errno == ENOENT;
+    }
+    const cJSON *type_value = cJSON_GetObjectItemCaseSensitive(removed, "type");
+    int type = cJSON_IsNumber(type_value) ? type_value->valueint : 5;
+    const char *rom = string(removed, "rompath");
+    *used = false;
+    for (const char *line = input; *line && !*used;) {
+        const char *newline = strchr(line, '\n');
+        size_t size = newline ? (size_t)(newline - line) : strlen(line);
+        cJSON *item = cJSON_ParseWithLength(line, size);
+        const cJSON *item_type = cJSON_GetObjectItemCaseSensitive(item, "type");
+        if (cJSON_IsObject(item) && (cJSON_IsNumber(item_type) ? item_type->valueint : 5) == type) {
+            *used = *rom ? !strcmp(string(item, "rompath"), rom)
+                         : !*string(item, "rompath") &&
+                               !strcmp(string(item, "launch"), string(removed, "launch")) &&
+                               !strcmp(string(item, "label"), string(removed, "label"));
+        }
+        cJSON_Delete(item);
+        if (!newline) {
+            break;
+        }
+        line = newline + 1;
+    }
+    free(input);
+    return true;
+}
+
+bool mainui_favorite_remove(const char *sd, const cJSON *record)
+{
+    char path[4096];
+    int n = snprintf(path, sizeof path, "%s/Roms/.mainui-library", sd);
+    if (n < 0 || n >= (int)sizeof path) {
+        return false;
+    }
+    MainUIFileLock *lock = mainui_file_lock(path);
+    bool ok = lock && mainui_saved_action_locked(sd, false, SAVED_REMOVE, record);
+    /* Under the same lock: forget the folder assignment only if no other
+     * Favorite of that ROM (another label or launcher) still uses it. */
+    bool used = true;
+    if (ok && (!assignment_still_used(sd, record, &used) ||
+               (!used && !forget_assignment_unlocked(sd, record)))) {
+        fprintf(stderr, "Favorite removed; stale folder assignment cleanup deferred.\n");
+    }
+    mainui_file_unlock(lock);
     return ok;
 }
 

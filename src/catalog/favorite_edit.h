@@ -28,4 +28,8 @@ bool mainui_favorite_edit(MainUIFavoriteEditor *editor, MainUILibrary *library, 
  * Failure leaves a harmless orphan assignment for a later retry; never removes
  * another Favorite or alters the stock file. */
 bool mainui_favorite_forget_assignment(const char *sd, const cJSON *record);
+/* Remove the Favorite row `record` describes (exactly, or by ROM when only one
+ * row has it) and, if no other Favorite still uses its folder assignment,
+ * that assignment, under one library lock. False if nothing was removed. */
+bool mainui_favorite_remove(const char *sd, const cJSON *record);
 #endif

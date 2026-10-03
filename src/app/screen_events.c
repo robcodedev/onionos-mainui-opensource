@@ -463,12 +463,11 @@ bool mainui_screen_context_menu_key(MainUIApp *ui, SDLKey key, int *requested_se
         entry->action == CONTEXT_REMOVE_FAVORITE) {
         bool recent = entry->action == CONTEXT_REMOVE_RECENT;
         MainUISavedAction action = entry->action == CONTEXT_ADD_FAVORITE ? SAVED_ADD : SAVED_REMOVE;
-        bool ok = mainui_saved_action(ui->sd, recent, action, ui->context_record);
+        bool ok = entry->action == CONTEXT_REMOVE_FAVORITE
+                      ? mainui_favorite_remove(ui->sd, ui->context_record)
+                      : mainui_saved_action(ui->sd, recent, action, ui->context_record);
         if (ok && entry->action == CONTEXT_REMOVE_FAVORITE) {
             mainui_favorite_editor_close(&ui->favorite_editor);
-            if (!mainui_favorite_forget_assignment(ui->sd, ui->context_record)) {
-                fprintf(stderr, "Favorite removed; stale folder assignment cleanup deferred.\n");
-            }
         }
         if (ok && ui->favorites) {
             if (!mainui_library_reload(ui->favorites, ui->sd)) {

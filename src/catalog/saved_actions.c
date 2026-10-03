@@ -34,8 +34,39 @@ static bool same(const cJSON *a, const cJSON *b)
            !strcmp(string(a, "label"), string(b, "label"));
 }
 
-static bool saved_action_unlocked(const char *sd, bool recent, MainUISavedAction action,
-                                  const cJSON *record)
+/* The Favorite row a record describes, as listed: one ROM can be a Favorite
+ * under several labels and launchers. */
+static bool exact(const cJSON *a, const cJSON *b)
+{
+    const cJSON *ta = cJSON_GetObjectItemCaseSensitive(a, "type");
+    const cJSON *tb = cJSON_GetObjectItemCaseSensitive(b, "type");
+    return !strcmp(real_rom(a), real_rom(b)) && !strcmp(string(a, "launch"), string(b, "launch")) &&
+           !strcmp(string(a, "label"), string(b, "label")) &&
+           (cJSON_IsNumber(ta) ? ta->valueint : 5) == (cJSON_IsNumber(tb) ? tb->valueint : 5);
+}
+
+/* How many lines of a Favorites file match `record` exactly and by ROM. */
+static void count_matches(const char *input, const cJSON *record, int *exact_count, int *same_count)
+{
+    *exact_count = *same_count = 0;
+    for (const char *line = input; *line;) {
+        const char *newline = strchr(line, '\n');
+        size_t size = newline ? (size_t)(newline - line) : strlen(line);
+        cJSON *item = cJSON_ParseWithLength(line, size);
+        if (cJSON_IsObject(item)) {
+            *exact_count += exact(item, record);
+            *same_count += same(item, record);
+        }
+        cJSON_Delete(item);
+        if (!newline) {
+            break;
+        }
+        line = newline + 1;
+    }
+}
+
+bool mainui_saved_action_locked(const char *sd, bool recent, MainUISavedAction action,
+                                const cJSON *record)
 {
     if (action != SAVED_CLEAR && !cJSON_IsObject(record)) {
         return false;
@@ -79,6 +110,13 @@ static bool saved_action_unlocked(const char *sd, bool recent, MainUISavedAction
     size_t written = 0;
     bool ok = true, found = false;
     int count = 0;
+    /* Removing a Favorite takes the selected row exactly. A record that matches
+     * no row exactly (the list changed) falls back to the ROM only if exactly
+     * one row has it; otherwise nothing is removed. */
+    int exact_count = 0, same_count = 0;
+    if (!recent && action == SAVED_REMOVE) {
+        count_matches(input, record, &exact_count, &same_count);
+    }
     for (char *line = input; *line;) {
         char *newline = strchr(line, '\n');
         size_t size = newline ? (size_t)(newline - line) : strlen(line);
@@ -98,7 +136,9 @@ static bool saved_action_unlocked(const char *sd, bool recent, MainUISavedAction
             found = true; /* Patched duplicate-label guard covers Apps as well as ROMs. */
         }
         if (item && action == SAVED_REMOVE && !found &&
-            (recent ? mainui_recent_same(item, record) : same(item, record))) {
+            (recent        ? mainui_recent_same(item, record)
+             : exact_count ? exact(item, record)
+                           : same_count == 1 && same(item, record))) {
             keep = false;
             found = true;
         }
@@ -116,6 +156,9 @@ static bool saved_action_unlocked(const char *sd, bool recent, MainUISavedAction
     }
     if (action == SAVED_ADD && !found && count >= 10000) {
         ok = false;
+    }
+    if (!recent && action == SAVED_REMOVE && !found) {
+        ok = false; /* not listed any more, or ambiguous: report, change nothing */
     }
     if (ok && action == SAVED_ADD && !found) {
         if (written && output[written - 1] != '\n') {
@@ -146,7 +189,7 @@ bool mainui_saved_action(const char *sd, bool recent, MainUISavedAction action, 
         return false;
     }
     MainUIFileLock *lock = mainui_file_lock(path);
-    bool ok = lock && saved_action_unlocked(sd, recent, action, record);
+    bool ok = lock && mainui_saved_action_locked(sd, recent, action, record);
     mainui_file_unlock(lock);
     return ok;
 }

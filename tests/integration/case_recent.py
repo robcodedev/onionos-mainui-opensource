@@ -128,6 +128,31 @@ same = [dict(label=label, rompath="/mnt/SDCARD/Roms/FC/same.nes",
         for label, emu in (("Label A", "FC-A"), ("Label B", "FC-B"))]
 favourites.write_text("".join(json.dumps(game) + "\n" for game in same), encoding="utf-8")
 assert [restored("favorites", i) for i in range(2)] == [0, 1]
+# Removing either of them removes exactly that row (review of 1.0.3), and
+# their shared folder assignment stays until no Favorite of that ROM is left.
+def remove_favorite(label):
+    return subprocess.run([str(BUILD / "fixture-recent"), str(sd), "remove-favorite", label],
+                          timeout=20).returncode
+lines = [json.dumps(game) + "\n" for game in same]
+assignment = dict(kind="item", key="/mnt/SDCARD/Roms/FC/same.nes", type=5, folder="f",
+                  order=0, note="kept")
+def setup_same():
+    favourites.write_text("".join(lines), encoding="utf-8")
+    sidecar.write_text("".join(json.dumps(row) + "\n" for row in (
+        dict(schema=1, generation=0),
+        dict(kind="folder", id="f", parent="", name="Folder", order=0), assignment)),
+        encoding="utf-8")
+def assigned():
+    return [row for row in map(json.loads, sidecar.read_text().splitlines())
+            if row.get("kind") == "item"]
+for keep, drop in ((0, 1), (1, 0)):
+    setup_same()
+    assert remove_favorite(same[drop]["label"]) == 0
+    assert favourites.read_text(encoding="utf-8") == lines[keep], (keep, drop)
+    assert assigned() == [assignment]  # still used by the survivor, unchanged
+assert remove_favorite(same[1]["label"]) == 0  # the last one of that ROM
+assert favourites.read_text(encoding="utf-8") == ""
+assert assigned() == []
 # A selected folder keeps its place even when an empty-ROM Favorite is listed.
 favourites.write_text("".join(json.dumps(app) + "\n" for app in apps), encoding="utf-8")
 sidecar.write_text(json.dumps(dict(schema=1, generation=0)) + "\n" +

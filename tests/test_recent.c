@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "app/session.h"
+#include "catalog/favorite_edit.h"
 #include "catalog/library.h"
 #include "catalog/saved_actions.h"
 #include <stdio.h>
@@ -37,11 +38,30 @@ static int restore(const char *sd, bool recent, int index)
 
 /* fixture-recent SD RECORD: add a committed launch.
  * fixture-recent SD remove INDEX: remove the INDEXth row Recents shows.
+ * fixture-recent SD remove-favorite LABEL: remove the Favorite with that label.
  * fixture-recent SD restore recents|favorites INDEX: see restore(). */
 int main(int argc, char **argv)
 {
     if (argc == 5 && !strcmp(argv[2], "restore")) {
         return restore(argv[1], !strcmp(argv[3], "recents"), atoi(argv[4]));
+    }
+    if (argc == 4 && !strcmp(argv[2], "remove-favorite")) {
+        MainUILibrary *library = calloc(1, sizeof *library);
+        if (!library) {
+            return 2;
+        }
+        /* Any loaded Favorite, in a folder or not, chosen by its label. */
+        bool ok = mainui_library_open(library, argv[1], false);
+        int found = -1;
+        for (int i = 0; ok && i < library->count; i++) {
+            if (!strcmp(library->items[i].label, argv[3])) {
+                found = i;
+            }
+        }
+        ok = ok && found >= 0 && mainui_favorite_remove(argv[1], library->items[found].json);
+        mainui_library_close(library);
+        free(library);
+        return ok ? 0 : 1;
     }
     if (argc == 4 && !strcmp(argv[2], "remove")) {
         MainUILibrary *library = calloc(1, sizeof *library);
