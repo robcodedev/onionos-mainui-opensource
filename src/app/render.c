@@ -478,6 +478,7 @@ static bool compose_full_frame(MainUIApp *ui)
         /* Retain the previous frame until the catalog result is ready. */
     }
     else if (ui->details.open) {
+        mainui_details_progress(&ui->details, ui->snapshot ? MAINUI_PREVIEW_WAIT_FOREVER : 0);
         mainui_details_draw(&ui->details, &ui->theme, ui->screen);
     }
     else if (ui->settings_page.open) {

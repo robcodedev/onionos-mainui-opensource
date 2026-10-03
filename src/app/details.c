@@ -12,6 +12,14 @@ void mainui_details_close(MainUIDetails *details)
     *details = (MainUIDetails){0};
 }
 
+void mainui_details_progress(MainUIDetails *details, Uint32 wait_ms)
+{
+    if (details->open && details->preview) {
+        mainui_preview_request_within(details->preview, details->catalog, details->library,
+                                      details->index, wait_ms);
+    }
+}
+
 static bool folder(MainUICatalog *catalog, const MainUILibrary *library, int row)
 {
     return library ? mainui_library_is_folder(library, row) : mainui_browser_folder(catalog, row);
@@ -112,7 +120,12 @@ bool mainui_details_open(MainUIDetails *details, MainUICatalog *catalog,
         }
     }
     *write = 0;
-    mainui_preview_update(details->preview, catalog, library, index);
+    /* Select the cover without waiting: a cached one shows at once, any
+     * other when its decode is done (mainui_details_progress). */
+    details->catalog = catalog;
+    details->library = library;
+    details->index = index;
+    mainui_preview_request_within(details->preview, catalog, library, index, 0);
     int leading = library ? library->leading_folders
                           : catalog->pages[catalog->depth].folder_count + (catalog->depth > 1);
     details->ordinal = row + 1 - leading;

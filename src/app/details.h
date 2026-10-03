@@ -12,6 +12,10 @@ typedef struct {
     char title[4096], system[4096];
     MainUIMetadata metadata;
     MainUIPreview *preview;
+    /* The shown game, for its cover: borrowed like the list models. */
+    MainUICatalog *catalog;
+    const MainUILibrary *library;
+    int index;
 } MainUIDetails;
 
 bool mainui_details_open(MainUIDetails *details, MainUICatalog *catalog,
@@ -22,6 +26,10 @@ bool mainui_details_open(MainUIDetails *details, MainUICatalog *catalog,
 void mainui_details_key(MainUIDetails *details, MainUICatalog *catalog,
                         const MainUILibrary *library, const MainUILibrary *favorites,
                         MainUIViewport *view, int rows, SDLKey key);
+/* Before drawing: advance the cover request without waiting (wait_ms 0), so a
+ * slow decode never holds up input; it is drawn when it is done. Snapshots
+ * pass MAINUI_PREVIEW_WAIT_FOREVER. */
+void mainui_details_progress(MainUIDetails *details, Uint32 wait_ms);
 void mainui_details_draw(MainUIDetails *details, MainUITheme *theme, SDL_Surface *screen);
 void mainui_details_close(MainUIDetails *details);
 #endif
