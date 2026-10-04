@@ -339,6 +339,9 @@ static cJSON *take_return_unlocked(const char *directory)
         if (errno == EINVAL || errno == EFBIG) {
             quarantine_return(directory, path);
         }
+        else if (errno != ENOENT) {
+            fprintf(stderr, "[return] cannot read %s: %s\n", path, strerror(errno));
+        }
         return NULL;
     }
     cJSON *root = cJSON_ParseWithOpts(text, NULL, true);
@@ -360,6 +363,8 @@ static cJSON *take_return_unlocked(const char *directory)
     if (!cJSON_IsTrue(committed) || !cJSON_IsNumber(schema) || schema->valuedouble != 1 ||
         !cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(root, "resume")) ||
         !cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(root, "record"))) {
+        fprintf(stderr, "[return] %s/mainui-return.json ignored: %s\n", directory,
+                root ? "not a complete return file" : "not valid JSON");
         cJSON_Delete(root);
         return NULL;
     }

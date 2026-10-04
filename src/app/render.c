@@ -629,7 +629,17 @@ static bool compose_full_frame(MainUIApp *ui)
         mainui_name_input_draw(&ui->name_input, ui->screen, &ui->theme);
     }
     if (*ui->message_title) {
+        /* Log each message once as it appears: many are only shown. */
+        char shown[sizeof ui->logged_message];
+        snprintf(shown, sizeof shown, "%s: %s", ui->message_title, ui->message_body);
+        if (strcmp(shown, ui->logged_message)) {
+            fprintf(stderr, "[message] %s\n", shown);
+            strcpy(ui->logged_message, shown);
+        }
         mainui_draw_message(ui->screen, &ui->theme, ui->message_title, ui->message_body);
+    }
+    else {
+        ui->logged_message[0] = 0;
     }
     if (ui->catalog_job.thread && !atomic_load(&ui->catalog_job.done) &&
         (SDL_GetTicks() - ui->catalog_job.started_at >= 500 ||

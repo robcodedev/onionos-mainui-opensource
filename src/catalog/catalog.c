@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 static bool search_database(const MainUICatalog *, const char *);
@@ -836,7 +837,14 @@ static bool rom_root_ready(MainUICatalog *catalog, const char *root)
     return false;
 }
 
-static bool build_cache_locked(MainUICatalog *catalog, int system, bool replace, bool abandon)
+/* What a build did, for its log line. */
+typedef struct {
+    bool built, from_xml;
+    long long rows;
+} BuildResult;
+
+static bool build_cache_locked(MainUICatalog *catalog, int system, bool replace, bool abandon,
+                               BuildResult *result)
 {
     if (mainui_cancelled(catalog->cancel) || system < 0 || system >= catalog->pages[0].count) {
         return false;
@@ -931,6 +939,8 @@ static bool build_cache_locked(MainUICatalog *catalog, int system, bool replace,
         free(scratch);
     }
     sqlite3_finalize(insert);
+    /* Ids count up from 1 in a new table: the last one is the row count. */
+    long long rows = ok ? sqlite3_last_insert_rowid(database) : 0;
 #ifdef MAINUI_TEST_FAULTS
     if (ok) {
         mainui_test_fault("cache-populated");
@@ -982,10 +992,14 @@ static bool build_cache_locked(MainUICatalog *catalog, int system, bool replace,
         snprintf(catalog->error, sizeof catalog->error, "%s",
                  "ROM cache build failed; previous database retained");
     }
+    else {
+        *result = (BuildResult){true, imported, rows};
+    }
     return ok;
 }
 
-static bool build_cache(MainUICatalog *catalog, int system, bool replace, bool abandon)
+static bool build_cache_unlogged(MainUICatalog *catalog, int system, bool replace, bool abandon,
+                                 BuildResult *result)
 {
     if (!catalog || system < 0 || system >= catalog->pages[0].count) {
         return false;
@@ -1015,9 +1029,46 @@ static bool build_cache(MainUICatalog *catalog, int system, bool replace, bool a
         return false;
     }
     struct timespec start = mainui_timing_start();
-    bool ok = build_cache_locked(catalog, system, replace, abandon);
+    bool ok = build_cache_locked(catalog, system, replace, abandon, result);
     mainui_timing_finish("cache-build-ms", start);
     mainui_file_unlock(lock);
+    return ok;
+}
+
+/* One log line per build that ran or failed, with why it was asked for:
+ * the cache was missing, it was damaged, or Refresh roms. A cache that was
+ * already there when only a missing one was to be built logs nothing. */
+static bool build_cache(MainUICatalog *catalog, int system, bool replace, bool abandon)
+{
+    if (!catalog || system < 0 || system >= catalog->pages[0].count) {
+        return false;
+    }
+    const char *reason = !replace ? "missing" : abandon ? "Refresh roms" : "damaged";
+    char previous[sizeof catalog->error];
+    strcpy(previous, catalog->error);
+    catalog->error[0] = 0;
+    struct timespec start, end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    BuildResult result = {0};
+    bool ok = build_cache_unlogged(catalog, system, replace, abandon, &result);
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    long long ms =
+        (long long)(end.tv_sec - start.tv_sec) * 1000 + (end.tv_nsec - start.tv_nsec) / 1000000;
+    const char *path = catalog->pages[0].entries[system].path;
+    if (!ok) {
+        fprintf(stderr, "[cache] %s: build failed (%s), reason %s\n", path,
+                mainui_cancelled(catalog->cancel) ? "cancelled"
+                : *catalog->error                 ? catalog->error
+                                                  : "no detail",
+                reason);
+    }
+    else if (result.built) {
+        fprintf(stderr, "[cache] %s: built from %s (%lld rows, %lld ms), reason %s\n", path,
+                result.from_xml ? "miyoogamelist.xml" : "the ROM files", result.rows, ms, reason);
+    }
+    if (!*catalog->error) {
+        strcpy(catalog->error, previous);
+    }
     return ok;
 }
 
@@ -1096,6 +1147,10 @@ bool mainui_catalog_remove_cache(MainUICatalog *catalog, int system)
     mainui_file_unlock(lock);
     if (!ok) {
         snprintf(catalog->error, sizeof catalog->error, "Could not remove ROM cache: %.190s", file);
+        fprintf(stderr, "[cache] %s: removal failed, reason Refresh roms\n", root);
+    }
+    else {
+        fprintf(stderr, "[cache] %s: removed, reason Refresh roms\n", root);
     }
     return ok;
 }
@@ -1184,6 +1239,10 @@ bool mainui_catalog_scan_only(const char *root)
         return false;
     }
     scan_root_count++;
+    fprintf(stderr,
+            "[scan] %s: its cache is still unreadable after a rebuild; scanning its folder "
+            "for the rest of this session\n",
+            root);
     return true;
 }
 
@@ -1275,7 +1334,8 @@ bool mainui_catalog_enter(MainUICatalog *catalog, int index)
                 close_page(next);
                 return false;
             }
-            fprintf(stderr, "%s; scanning %s without a cache\n", catalog->error, next->path);
+            fprintf(stderr, "[scan] %s: listed by scanning its folder (cache not built: %s)\n",
+                    next->path, catalog->error);
             next->cache_fallback = true;
         }
     }
@@ -1319,7 +1379,8 @@ bool mainui_catalog_enter(MainUICatalog *catalog, int index)
         }
         next->count = next->loaded = next->folder_count = 0;
         next->cache_fallback = true;
-        fprintf(stderr, "Cache unavailable or invalid; scanning %s\n", next->path);
+        fprintf(stderr, "[scan] %s: listed by scanning its folder (cache unreadable)\n",
+                next->path);
     }
     if (!scan(next, catalog->sd, false, catalog->case_sensitive, catalog->cancel)) {
         close_page(next);

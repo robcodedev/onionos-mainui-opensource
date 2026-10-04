@@ -275,7 +275,11 @@ static bool recover(const char *cache, const char *table, const char *root, cons
 
 bool mainui_delete_recover(const char *cache, const char *table, const char *root, const char *sd)
 {
+    bool pending = mainui_delete_journal_present(cache);
     bool ok = recover(cache, table, root, sd);
+    if (ok && pending && !mainui_delete_journal_present(cache)) {
+        fprintf(stderr, "[delete] resolved the interrupted ROM deletion recorded for %s\n", cache);
+    }
     if (!ok) {
         char journal[4096];
         if (journal_path(journal, cache)) {

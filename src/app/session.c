@@ -242,6 +242,9 @@ bool mainui_session_restore_control(MainUISession *out, const char *sd, bool sen
                     break;
                 }
             }
+            if (folder < 0) {
+                fprintf(stderr, "[restore] the Favorites folder is gone; reopening the top\n");
+            }
             while (folder >= 0 && count < 4) {
                 chain[count++] = folder;
                 folder = pending.library->folders[folder].parent;
@@ -323,6 +326,8 @@ bool mainui_session_restore_control(MainUISession *out, const char *sd, bool sen
                 }
             }
             if (found < 0) {
+                /* Opens the deepest level that is still there. */
+                fprintf(stderr, "[restore] %s is gone; reopening its parent instead\n", target);
                 break;
             }
             mainui_viewport_move(&pending.view,

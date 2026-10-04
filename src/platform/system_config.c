@@ -107,6 +107,29 @@ static bool restore_monitor(const MainUISettingsMonitor *monitor, MonitorChange 
     return restored;
 }
 
+/* A save that failed after system.json was read: the keys, and whether the
+ * live values were put back. Failures only, since a save runs on every value
+ * change; a damaged file is reported by the caller, once. */
+static void log_not_saved(const char *path, const cJSON *values, MainUISettingsResult result)
+{
+    char keys[256] = "";
+    size_t used = 0;
+    const cJSON *item;
+    cJSON_ArrayForEach(item, values)
+    {
+        int n = snprintf(keys + used, sizeof keys - used, "%s%s", used ? ", " : "",
+                         item->string ? item->string : "?");
+        if (n < 0 || (size_t)n >= sizeof keys - used) {
+            break;
+        }
+        used += (size_t)n;
+    }
+    fprintf(stderr, "[settings] %s not saved to %s%s\n", keys, path,
+            result == MAINUI_SETTINGS_PARTLY
+                ? "; a live value could not be put back and may differ from the file"
+                : "; the previous values are in effect");
+}
+
 static MainUISettingsResult patch_unlocked(const char *sd, const cJSON *values)
 {
     cJSON *root = mainui_system_read(sd);
@@ -165,8 +188,11 @@ static MainUISettingsResult patch_unlocked(const char *sd, const cJSON *values)
     if (ok) {
         return MAINUI_SETTINGS_SAVED;
     }
-    return !monitor || restore_monitor(monitor, changes, count) ? MAINUI_SETTINGS_NOT_SAVED
-                                                                : MAINUI_SETTINGS_PARTLY;
+    MainUISettingsResult result = !monitor || restore_monitor(monitor, changes, count)
+                                      ? MAINUI_SETTINGS_NOT_SAVED
+                                      : MAINUI_SETTINGS_PARTLY;
+    log_not_saved(path, values, result);
+    return result;
 }
 
 bool mainui_system_damaged(const char *sd)

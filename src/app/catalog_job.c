@@ -10,6 +10,44 @@ static bool cancelled(void *context)
     return atomic_load_explicit(&((MainUICatalogJob *)context)->cancel, memory_order_relaxed);
 }
 
+static const char *kind_name(MainUIJobKind kind)
+{
+    switch (kind) {
+    case JOB_DISCOVER:
+        return "discovery";
+    case JOB_ENTER:
+        return "folder read";
+    case JOB_RELOAD:
+        return "reload";
+    case JOB_SEARCH:
+        return "search";
+    case JOB_REFRESH_SYSTEM:
+        return "Refresh roms";
+    case JOB_REPAIR_SYSTEM:
+        return "repair";
+    case JOB_REFRESH_ALL:
+        return "Refresh all roms";
+    }
+    return "job";
+}
+
+/* One line for a job that failed (not one cancelled), naming the console it
+ * was for when there is one: its config file. */
+static void log_failure(const MainUICatalogJob *job)
+{
+    const char *console = job->target;
+    const MainUICatalog *catalog = job->session.catalog;
+    if (!*console && catalog) {
+        int system = catalog->depth ? catalog->pages[0].view.selected : job->session.view.selected;
+        if (system >= 0 && system < catalog->pages[0].count &&
+            catalog->pages[0].entries[system].config) {
+            console = catalog->pages[0].entries[system].config;
+        }
+    }
+    fprintf(stderr, "[job] %s failed%s%s: %s\n", kind_name(job->kind), *console ? " for " : "",
+            console, job->error);
+}
+
 static int work(void *context)
 {
     MainUICatalogJob *job = context;
@@ -92,6 +130,9 @@ static int work(void *context)
                      : "Cannot complete catalog operation.");
     }
     job->success = ok && !cancelled(job);
+    if (!ok && !cancelled(job)) {
+        log_failure(job);
+    }
     atomic_store_explicit(&job->done, true, memory_order_release);
     SDL_Event event = {.type = SDL_USEREVENT};
     SDL_PushEvent(&event);

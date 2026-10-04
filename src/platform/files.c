@@ -104,6 +104,9 @@ static MainUIWriteResult publish_bytes(const char *path, const void *data, size_
     }
     char temporary[4096];
     if (!data || size > 16u * 1024u * 1024u || !mainui_temporary_path(temporary, path, "writing")) {
+        fprintf(stderr, "[write] cannot save %s: %s\n", path,
+                !data || size > 16u * 1024u * 1024u ? "no data, or too large"
+                                                    : "no temporary file name is free");
         return MAINUI_WRITE_UNCHANGED;
     }
     /* Exclusive reservation avoids truncating a concurrent writer's temporary. */
@@ -134,9 +137,15 @@ static MainUIWriteResult publish_bytes(const char *path, const void *data, size_
         }
     }
     if (!ok) {
+        int error = errno;
         if (owned) {
             mainui_remove_file(temporary);
         }
+        /* A new file that exists already is an expected outcome, not a fault. */
+        if (replace || error != EEXIST) {
+            fprintf(stderr, "[write] cannot save %s: %s\n", path, strerror(error));
+        }
+        errno = error;
         return MAINUI_WRITE_UNCHANGED;
     }
     FAULT("published");

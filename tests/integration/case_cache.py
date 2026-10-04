@@ -130,7 +130,10 @@ def recovery_run(sd, name, actions, env=None):
     result = subprocess.run(command, cwd=ROOT, timeout=30, capture_output=True, text=True,
                             env=env)
     assert result.returncode == 0, (name, result.returncode, result.stderr[-400:])
-    assert 'cannot be read' not in result.stderr
+    # No unreadable-page error escapes recovery; a message it leaves on
+    # screen is logged as [message], which is expected.
+    assert not any('cannot be read' in line for line in result.stderr.splitlines()
+                   if not line.startswith('[message] ')), result.stderr[-400:]
     steps = [line.split(': ', 1)[1] for line in result.stderr.splitlines()
              if line.startswith('Recovering an unreadable list page')]
     return steps, out.read_bytes()

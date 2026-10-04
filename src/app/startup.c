@@ -20,6 +20,10 @@
 #include <unistd.h>
 #endif
 
+#ifndef MAINUI_VERSION
+#define MAINUI_VERSION "0-dev"
+#endif
+
 /* Temporary startup diagnostics. Use 64-bit milliseconds on the 32-bit device. */
 static long long startup_ms(void)
 {
@@ -304,6 +308,9 @@ int mainui_setup_video(MainUIApp *ui)
     if (ui->sd) {
         mainui_language_load(ui->sd, ui->theme.fallback);
     }
+    /* Which build runs where, for reports that come with only a log. */
+    fprintf(stderr, "[startup] Open MainUI %s, device %d, sd %s, theme %s\n", MAINUI_VERSION,
+            ui->device_status.model.id, ui->sd ? ui->sd : "-", ui->theme.directory);
     /* Kept deliberately for startup timing diagnostics. */
     fprintf(stderr, "[startup] sdl-init %lld ttf-init %lld set-mode %lld theme %lld\n", t1 - t0,
             t2 - t1, t3 - t2, startup_ms() - t3);
@@ -431,10 +438,20 @@ void mainui_restore_session(MainUIApp *ui)
             stock_state_console(ui->handoff_dir, stock_label);
         }
         MainUISession restored = {0};
-        if (returned &&
+        bool resumed =
+            returned &&
             mainui_session_restore(&restored, ui->sd, ui->config.case_sensitive, ui->config.rows,
                                    cJSON_GetObjectItemCaseSensitive(returned, "resume"),
-                                   cJSON_GetObjectItemCaseSensitive(returned, "record"))) {
+                                   cJSON_GetObjectItemCaseSensitive(returned, "record"));
+        if (returned && !resumed) {
+            const cJSON *section = cJSON_GetObjectItemCaseSensitive(
+                cJSON_GetObjectItemCaseSensitive(returned, "resume"), "section");
+            fprintf(stderr,
+                    "[return] the saved screen (section %d) could not be restored; "
+                    "starting on Home\n",
+                    cJSON_IsNumber(section) ? section->valueint : -1);
+        }
+        if (resumed) {
             mainui_viewport_restore(&ui->home_view, ui->menu.count, 4, restored.home.selected,
                                     restored.home.start, restored.home.end);
             if (restored.home_only) {
@@ -497,8 +514,12 @@ void mainui_restore_session(MainUIApp *ui)
                 ui->view = ui->search.view;
             }
             else {
+                fprintf(stderr, "[return] the Search results could not be restored\n");
                 mainui_search_close(&ui->search);
             }
+        }
+        else if (!ui->home && !ui->library && cJSON_IsString(query)) {
+            fprintf(stderr, "[return] the Search results could not be reopened\n");
         }
         /* After Search started by keymon: only if the stock state names the
          * console that is the Search system. */
@@ -506,6 +527,10 @@ void mainui_restore_session(MainUIApp *ui)
         for (int i = 0; *stock_label && i < ui->games->pages[0].count && !stock_search; ++i) {
             stock_search = mainui_catalog_search_system(ui->games, i) &&
                            same_label(ui->games->pages[0].entries[i].label, stock_label);
+        }
+        if (stock_search && !from_search) {
+            fprintf(stderr, "[return] no return file; following the stock state.json to "
+                            "Games -> Search\n");
         }
         if (from_search || stock_search) {
             bool found = false;

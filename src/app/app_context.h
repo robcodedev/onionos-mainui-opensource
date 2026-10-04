@@ -99,6 +99,8 @@ typedef struct {
     MainUIViewport saved_library_views[2];
     char message_title[256];
     char message_body[256];
+    /* The message last written to the log, so each is logged once. */
+    char logged_message[520];
     MainUILibrary *library;
     MainUILibrary *favorites;
     bool favorite_rows[20];

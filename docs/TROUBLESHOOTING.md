@@ -9,7 +9,21 @@ Open MainUI writes its diagnostics to stderr. How much of that you can keep depe
 * **With the [optional wrapper](BUILDING.md#optional-wrapper-install-with-a-stock-switch-and-logging):** output is saved to `.tmp_update/logs/MainUI.log` only when `.tmp_update/config/.logging` exists on the SD card; otherwise it is discarded. Create that empty marker file, then reproduce the problem.
 * **With the [simple method](BUILDING.md#simple-method-replace-the-binaries-directly):** Onion does not save MainUI's output. Install with the wrapper if you need a log.
 
-A log of at least 1 MiB is moved to `MainUI.log.1` at the next start, so copy the log off the card soon after reproducing the problem.
+A log of at least 1 MiB is moved to `MainUI.log.1` at the next start, so copy the log off the card soon after reproducing the problem. Onion itself deletes `MainUI.log` at every boot, so a problem seen after a restart needs the log copied before the next one.
+
+## Reading a log
+
+The first line of each start names the build: `[startup] Open MainUI <version>, device <model>, sd <path>, theme <path>`. Other lines start with what they are about, one line per event:
+
+* `[message]`: every message shown on screen, as it appears.
+* `[cache]`: each ROM list cache built (from `miyoogamelist.xml` or the ROM files, with its row count and time) or removed, and why: the cache was missing, it was damaged, or Refresh roms. A failed build gives its error.
+* `[scan]`: a console listed by scanning its folder because its cache could not be built or read.
+* `[job]`: a background read, search, refresh or repair that failed, with the console's `config.json`.
+* `[return]` and `[restore]`: why the screen left for a game or app could not be shown again on return.
+* `[write]`: a file that could not be saved, with the reason.
+* `[settings]`: a setting that could not be saved to `system.json`.
+* `[delete]`: an interrupted ROM deletion resolved automatically.
+* `[timing]`: timing counters; see [TIMING.md](TIMING.md).
 
 ## A console lists file names instead of its gamelist titles
 
