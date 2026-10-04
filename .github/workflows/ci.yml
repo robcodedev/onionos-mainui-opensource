@@ -61,9 +61,15 @@ jobs:
       # Onion SD cards are FAT32, which has no hard links. Run the delete and
       # persistence cases with link() disabled, then on a real vfat image.
       - name: No-hard-link cases
+        env:
+          MAINUI_STRICT: 1
+          ONION_ROOT: ${{ github.workspace }}/onion
         run: make check-no-hardlinks
 
       - name: Real vfat cases
+        env:
+          MAINUI_STRICT: 1
+          ONION_ROOT: ${{ github.workspace }}/onion
         run: make check-vfat
 
   sanitizers:

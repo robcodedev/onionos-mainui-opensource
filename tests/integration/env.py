@@ -48,8 +48,14 @@ def require_fixture_sd():
 
 
 def require_onion_theme():
-    if not ONION_THEME.is_dir():
-        skip(f"Onion theme tree not found at {ONION_THEME}")
+    try:
+        found = ONION_THEME.is_dir()
+    except OSError as error:  # for example no permission to look (Python 3.12 raises)
+        found, reason = False, f" ({error.strerror})"
+    else:
+        reason = ""
+    if not found:
+        skip(f"Onion theme tree not found at {ONION_THEME}{reason}; set ONION_ROOT")
     return ONION_THEME
 
 
