@@ -140,18 +140,112 @@ void mainui_draw_apps(SDL_Surface *screen, MainUITheme *theme, MainUICatalog *ap
     SDL_SetClipRect(screen, NULL);
 }
 
+/* Length of the longest prefix of text, ending at a character boundary, that
+ * fits in width; at least one character so a line always advances. */
+static size_t fitting_prefix(TTF_Font *font, const char *text, size_t length, int width)
+{
+    char line[256];
+    size_t best = 0;
+    for (size_t end = 1; end <= length && end < sizeof line; end++) {
+        if (end < length && ((unsigned char)text[end] & 0xc0) == 0x80) {
+            continue; /* Inside a UTF-8 character. */
+        }
+        memcpy(line, text, end);
+        line[end] = 0;
+        int w = 0;
+        if (TTF_SizeUTF8(font, line, &w, NULL) || w > width) {
+            break;
+        }
+        best = end;
+    }
+    if (!best) {
+        while (best < length && (best == 0 || ((unsigned char)text[best] & 0xc0) == 0x80)) {
+            best++;
+        }
+    }
+    return best;
+}
+
+/* Split text into lines no wider than width, breaking at spaces and inside a
+ * word only when it is wider than a line. Returns the number of lines. */
+static int wrap_text(TTF_Font *font, const char *text, int width, char lines[][256], int most)
+{
+    int count = 0;
+    while (*text == ' ') {
+        text++;
+    }
+    while (*text && count < most) {
+        size_t length = strlen(text);
+        size_t fit = fitting_prefix(font, text, length, width);
+        size_t cut = fit;
+        if (fit < length && text[fit] != ' ') {
+            /* Break at the last space that fits, if there is one. */
+            for (size_t i = fit; i > 0; i--) {
+                if (text[i - 1] == ' ') {
+                    cut = i - 1;
+                    break;
+                }
+            }
+            if (cut == fit || !cut) {
+                cut = fit;
+            }
+        }
+        if (cut >= sizeof lines[0]) {
+            cut = sizeof lines[0] - 1;
+        }
+        memcpy(lines[count], text, cut);
+        lines[count][cut] = 0;
+        count++;
+        text += cut;
+        while (*text == ' ') {
+            text++;
+        }
+    }
+    return count;
+}
+
 void mainui_draw_message(SDL_Surface *screen, MainUITheme *theme, const char *title,
                          const char *body)
 {
-    SDL_Rect panel = {20, 145, 600, 190};
+    /* The body wraps to as many lines as it needs; the panel grows down for
+     * more than one line, up to the bottom of the screen. Messages are
+     * deliberately bounded; no path is ever interpreted as a format string or
+     * a host command. */
+    enum {
+        TOP = 145,
+        LEFT = 35,
+        WIDTH = 570,
+        BODY = 215,
+        BOTTOM = 470
+    };
+
+    int skip = TTF_FontLineSkip(theme->title_font);
+    if (skip < 1) {
+        skip = 1;
+    }
+    char lines[8][256];
+    int most = (BOTTOM - 10 - skip - 10 - BODY) / skip;
+    if (most < 1) {
+        most = 1;
+    }
+    if (most > 8) {
+        most = 8;
+    }
+    int count = wrap_text(theme->title_font, body ? body : "", WIDTH, lines, most);
+    int hint = count <= 1 ? 280 : BODY + count * skip + 10;
+    int bottom = hint + skip + 10 > TOP + 190 ? hint + skip + 10 : TOP + 190;
+    if (bottom > BOTTOM) {
+        bottom = BOTTOM;
+    }
+    SDL_Rect panel = {20, TOP, 600, (Uint16)(bottom - TOP)};
     SDL_FillRect(screen, &panel, SDL_MapRGB(screen->format, 24, 24, 24));
-    SDL_Rect clip = {35, 150, 570, 180};
+    SDL_Rect clip = {LEFT, TOP + 5, WIDTH, (Uint16)(bottom - TOP - 10)};
     SDL_SetClipRect(screen, &clip);
-    mainui_label(screen, theme->title_font, theme->title_color, title, 35, 160);
-    /* Messages are deliberately bounded. Long device paths remain clipped;
-     * no path is ever interpreted as a format string or a host command. */
-    mainui_label(screen, theme->title_font, theme->color, body, 35, 215);
-    mainui_label(screen, theme->title_font, theme->hint_color, "A / B: close", 35, 280);
+    mainui_label(screen, theme->title_font, theme->title_color, title, LEFT, 160);
+    for (int i = 0; i < count; i++) {
+        mainui_label(screen, theme->title_font, theme->color, lines[i], LEFT, BODY + i * skip);
+    }
+    mainui_label(screen, theme->title_font, theme->hint_color, "A / B: close", LEFT, hint);
     SDL_SetClipRect(screen, NULL);
 }
 
