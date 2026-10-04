@@ -152,6 +152,11 @@ cJSON *mainui_session_snapshot(MainUIMenuSection section, MainUICatalog *catalog
                 }
             }
         }
+        /* A console scanned for this visit stays scanned in the catalog
+         * rebuilt from this snapshot (folder entry, reload, return). */
+        if (ok && catalog->depth && catalog->pages[1].scan_visit) {
+            ok = cJSON_AddBoolToObject(root, "scan_visit", true) != NULL;
+        }
         if (ok && catalog->depth) {
             int selected = catalog->pages[0].view.selected;
             char path[4096];
@@ -335,6 +340,15 @@ bool mainui_session_restore_control(MainUISession *out, const char *sd, bool sen
                                  found - pending.view.selected, false);
             if (level == 1 && section != MAINUI_MENU_APPS) {
                 mainui_browser_grid_restore(pending.catalog, &pending.view, pending.view.selected);
+            }
+            if (level == 1 &&
+                cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(resume, "scan_visit"))) {
+                MainUIEntry *console = mainui_catalog_entry(
+                    pending.catalog, mainui_browser_index(pending.catalog, found));
+                if (!console || !mainui_catalog_keep_scanning(console->path)) {
+                    ok = false;
+                    break;
+                }
             }
             if (!mainui_browser_enter(pending.catalog, &pending.view, rows)) {
                 ok = false;

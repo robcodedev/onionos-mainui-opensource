@@ -112,6 +112,8 @@ static int work(void *context)
                                  ? mainui_catalog_repair_cache(catalog, system)
                                  : mainui_catalog_build_cache(catalog, system, true));
             if (ok && in_list) {
+                /* A rebuilt cache supersedes scanning for the visit. */
+                cJSON_DeleteItemFromObjectCaseSensitive(job->resume, "scan_visit");
                 mainui_session_close(&job->session);
                 ok = mainui_session_restore_control(&job->session, job->sd, job->sensitive,
                                                     job->rows, job->resume, job->record, cancel);

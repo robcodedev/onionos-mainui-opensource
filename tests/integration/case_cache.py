@@ -87,6 +87,9 @@ run('fallback', 'wal', wal=True)
 run('repaired','invalid-row',[row(1,'Invalid','./x.nes',9)])
 run('repaired','nul-row',[row(1,'bad\0label','./x.nes')])
 run('repaired','long-row',[row(1,'x'*4096,'./x.nes')])
+# A console scanned as the last step of recovering a page is scanned for that
+# visit only: the next entry reads its cache again.
+run('scan-once','scan-once',[row(1,'Cached','./fallback.nes')])
 run('bad-later','bad-later',[row(i+1,f'Game {i:03d}','./x.nes' if i<69 else '') for i in range(70)])
 run('sort','sort',[row(i+1,label,f'./{i}.nes') for i,label in enumerate(['alpha','ALPHA','beta','Zebra'])])
 # Real SDL rendering exercises the former fixed-size list boundary and cross-window navigation.
@@ -146,7 +149,7 @@ steps, recovered = recovery_run(sd, 'recovered', 'U')
 assert steps == ['reloading', 'rebuilding the cache'], steps
 assert recovery_run(sd, 'clean', 'U') == ([], recovered)
 # The rebuild fails (another build's reservation is in the way): the folder
-# is scanned for the session, still at the same row, and the damaged cache
+# is scanned for this visit, still at the same row, and the damaged cache
 # is left as it was.
 sd = recovery_sd('scan')
 (sd / 'Roms/REC/REC_cache6.db.building').write_text('foreign')
@@ -157,6 +160,24 @@ assert (sd / 'Roms/REC/REC_cache6.db').read_bytes() == cache
 blocked = recovery_sd('blocked', cache=False)
 (blocked / 'Roms/REC/REC_cache6.db.building').write_text('foreign')
 assert recovery_run(blocked, 'blocked', 'U')[1] == scanned
+# Within that visit, opening a folder (a background job that rebuilds the
+# catalog from a snapshot) keeps scanning: a folder made after the cache was
+# built opens with its files, as in a console that has no cache at all, and
+# the damaged cache is still left as it was.
+def with_extra(target):
+    (target / 'Roms/REC/Extra').mkdir()
+    (target / 'Roms/REC/Extra/Extra game.nes').write_bytes(b'rom')
+    (target / 'Roms/REC/REC_cache6.db.building').write_text('foreign')
+    return target
+sd = with_extra(recovery_sd('scan-folder'))
+cache = (sd / 'Roms/REC/REC_cache6.db').read_bytes()
+reference = recovery_run(with_extra(recovery_sd('scan-folder-plain', cache=False)), 'extra', 'E')[1]
+# Recovery keeps the row number, which the scanned list's leading Extra
+# folder shifts to the last game but one: two Downs wrap to Extra.
+steps, opened = recovery_run(sd, 'extra', 'UDDE')
+assert steps == ['reloading', 'rebuilding the cache', 'scanning the folder'], steps
+assert opened == reference
+assert (sd / 'Roms/REC/REC_cache6.db').read_bytes() == cache
 # A gamelist with no usable <gameList> does not stop the rebuild: the cache
 # is rebuilt from the ROM files.
 plain = recovery_sd('plain', cache=False)

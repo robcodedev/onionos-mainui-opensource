@@ -32,6 +32,15 @@ int main(int argc, char **argv)
         assert(mainui_catalog_back(c) && mainui_catalog_enter(c, 0));
         assert(c->pages[1].cache && !c->pages[1].cache_fallback);
     }
+    else if (!strcmp(argv[2], "scan-once")) {
+        assert(p->cache && !strcmp(mainui_catalog_entry(c, 0)->label, "Cached"));
+        assert(mainui_catalog_back(c) && mainui_catalog_scan_only(c->pages[0].entries[0].path));
+        assert(mainui_catalog_enter(c, 0) && !p->cache && p->cache_fallback);
+        assert(!strcmp(mainui_catalog_entry(c, 0)->label, "fallback"));
+        assert(mainui_catalog_back(c) && mainui_catalog_enter(c, 0));
+        assert(p->cache && !p->cache_fallback);
+        assert(!strcmp(mainui_catalog_entry(c, 0)->label, "Cached"));
+    }
     else if (!strcmp(argv[2], "empty")) {
         assert(p->cache && !p->count && !p->loaded);
         assert(!mainui_catalog_entry(c, 0));

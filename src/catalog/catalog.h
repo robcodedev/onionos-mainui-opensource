@@ -33,6 +33,10 @@ typedef struct {
     int folder_count; /* Leading folder rows; excluded only from the displayed counter. */
     struct MainUICache *cache;
     bool cache_fallback;
+    /* A console page scanned for this visit by recovery (see
+     * mainui_catalog_scan_only()); session snapshots carry it, so folder
+     * entry and other rebuilt catalogs in the same visit keep scanning. */
+    bool scan_visit;
     char cache_file[MAINUI_PATH_MAX], cache_table[512];
     char title[256];
     char path[MAINUI_PATH_MAX], extensions[1024], images[MAINUI_PATH_MAX];
@@ -78,10 +82,13 @@ bool mainui_catalog_remove_cache(MainUICatalog *catalog, int system);
 /* Enter a selected system/folder. Files are deliberately not executable here. */
 bool mainui_catalog_enter(MainUICatalog *catalog, int index);
 /* Browse the console whose ROM root is `root` by scanning its folder instead
- * of its cache, for the rest of the session: the last step of recovering a
- * cache page that cannot be read. Call it on the UI thread while no catalog
- * worker runs; workers started later see it. False only when out of memory. */
+ * of its cache on its next entry only (the visit that restores the list): the
+ * last step of recovering a cache page that cannot be read. The entry after
+ * that tries the cache again. False only when out of memory. */
 bool mainui_catalog_scan_only(const char *root);
+/* The same mark without a log line: a rebuilt catalog continuing a visit
+ * that scans (a session snapshot with scan_visit) sets it before entering. */
+bool mainui_catalog_keep_scanning(const char *root);
 /* After the current page failed to load: true only if its cache content is
  * damaged (see mainui_cache_damaged()), which a rebuild can repair. */
 bool mainui_catalog_page_damaged(const MainUICatalog *catalog);

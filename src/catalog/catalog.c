@@ -11,6 +11,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1209,41 +1210,64 @@ bool mainui_catalog_search_system(const MainUICatalog *catalog, int index)
            mainui_search_root(catalog->sd, catalog->pages[0].entries[index].path);
 }
 
-/* Console roots browsed by scanning for the rest of the session. Changed on
- * the UI thread only while no catalog worker runs; workers started later read
- * it. Kept until exit, so it stays reachable. */
+/* Console roots to browse by scanning on their next entry only: each mark is
+ * taken by that entry, so the entry after it tries the cache again and one
+ * transient failure never turns the cache off for the session. Marked on the
+ * UI thread, taken by the worker that restores the list; the lock keeps the
+ * two apart. */
+static pthread_mutex_t scan_lock = PTHREAD_MUTEX_INITIALIZER;
 static char **scan_roots;
 static int scan_root_count;
 
-static bool scanned_only(const char *root)
+static int scan_mark(const char *root)
 {
     for (int i = 0; i < scan_root_count; i++) {
         if (!strcmp(scan_roots[i], root)) {
-            return true;
+            return i;
         }
     }
-    return false;
+    return -1;
+}
+
+/* True if root was marked; the mark is removed. */
+static bool take_scan_only(const char *root)
+{
+    pthread_mutex_lock(&scan_lock);
+    int i = scan_mark(root);
+    if (i >= 0) {
+        free(scan_roots[i]);
+        scan_roots[i] = scan_roots[--scan_root_count];
+    }
+    pthread_mutex_unlock(&scan_lock);
+    return i >= 0;
+}
+
+bool mainui_catalog_keep_scanning(const char *root)
+{
+    pthread_mutex_lock(&scan_lock);
+    bool ok = scan_mark(root) >= 0;
+    if (!ok) {
+        char **grown = realloc(scan_roots, (size_t)(scan_root_count + 1) * sizeof *grown);
+        if (grown) {
+            scan_roots = grown;
+            ok = (scan_roots[scan_root_count] = strdup(root)) != NULL;
+            scan_root_count += ok;
+        }
+    }
+    pthread_mutex_unlock(&scan_lock);
+    return ok;
 }
 
 bool mainui_catalog_scan_only(const char *root)
 {
-    if (scanned_only(root)) {
-        return true;
+    bool ok = mainui_catalog_keep_scanning(root);
+    if (ok) {
+        fprintf(stderr,
+                "[scan] %s: its cache is still unreadable after a rebuild; scanning its folder "
+                "for this visit\n",
+                root);
     }
-    char **grown = realloc(scan_roots, (size_t)(scan_root_count + 1) * sizeof *grown);
-    if (!grown) {
-        return false;
-    }
-    scan_roots = grown;
-    if (!(scan_roots[scan_root_count] = strdup(root))) {
-        return false;
-    }
-    scan_root_count++;
-    fprintf(stderr,
-            "[scan] %s: its cache is still unreadable after a rebuild; scanning its folder "
-            "for the rest of this session\n",
-            root);
-    return true;
+    return ok;
 }
 
 bool mainui_catalog_search_results(const MainUICatalog *catalog)
@@ -1311,11 +1335,12 @@ bool mainui_catalog_enter(MainUICatalog *catalog, int index)
             pending_delete = mainui_delete_journal_present(next->cache_file);
         }
     }
-    /* Its cache could not be read even after a rebuild: scan the folder. A
-     * scanned page's children are scanned too, so this covers the console. */
-    bool forced_scan = !catalog->depth && scanned_only(next->path);
+    /* Its cache could not be read even after a rebuild: scan the folder for
+     * this visit. A scanned page's children are scanned too, so this covers
+     * the console until it is left; the next entry tries the cache again. */
+    bool forced_scan = !catalog->depth && take_scan_only(next->path);
     if (forced_scan) {
-        next->cache_fallback = true;
+        next->cache_fallback = next->scan_visit = true;
     }
     if (!forced_scan && !pending_delete && !catalog->depth && !path_exists(next->cache_file) &&
         !search_database(catalog, next->path)) {
