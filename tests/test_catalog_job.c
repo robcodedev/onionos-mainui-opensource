@@ -392,14 +392,24 @@ int main(int argc, char **argv)
     refreshed = (MainUISession){0};
     source.catalog = opened.catalog;
     source.view = &opened.view;
-    char xml[4096];
-    snprintf(xml, sizeof xml, "%s/Roms/Host/miyoogamelist.xml", sd);
-    assert(mainui_write_text_atomic(xml, "<gameList><broken>"));
+    /* An interrupted build that cannot be cleaned up (a folder in its place)
+     * makes the refresh fail. */
+    char stale[4200], xml[4096];
+    snprintf(stale, sizeof stale, "%s.building.stale", file);
+    assert(mkdir(stale, 0755) == 0);
     unsigned unchanged = hash_file(file);
     assert(mainui_catalog_job_start(&job, JOB_REFRESH_SYSTEM, &source, sd, false, 6, NULL, 7));
     assert(wait_job(&job, 7, &refreshed) == JOB_FAILED);
+    assert(rmdir(stale) == 0);
     assert(hash_file(file) == unchanged);
     assert(mainui_browser_label(opened.catalog, 80));
+    /* A gamelist with no usable <gameList> is not imported: the files are listed. */
+    snprintf(xml, sizeof xml, "%s/Roms/Host/miyoogamelist.xml", sd);
+    assert(mainui_write_text_atomic(xml, "<gameList><broken>"));
+    assert(mainui_catalog_job_start(&job, JOB_REFRESH_SYSTEM, &source, sd, false, 6, NULL, 8));
+    assert(wait_job(&job, 8, &refreshed) == JOB_READY);
+    assert(refreshed.catalog->depth == 1 && refreshed.view.total == 200);
+    mainui_session_close(&refreshed);
     assert(remove(xml) == 0);
     assert(mainui_catalog_job_start(&job, JOB_REFRESH_SYSTEM, &source, sd, false, 6, NULL, 8));
     assert(wait_job(&job, 8, &refreshed) == JOB_READY);

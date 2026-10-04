@@ -6,10 +6,14 @@
 #include <stdbool.h>
 /* Import a present ROM-root miyoogamelist.xml into the caller's transaction.
  * root is the normalized host ROM directory; saved_root is its verbatim stock
- * prefix. Borrows all arguments. Never commits or publishes the database. Returns false
- * for I/O, malformed/unsupported XML, bounds or SQL errors; caller must roll back.
- * Missing files return true with *present=false, allowing filesystem fallback.
- * This does not read the independent game-detail gamelist.xml format.
+ * prefix. Borrows all arguments. Never commits or publishes the database.
+ * The XML is read leniently, as stock reads it. A missing file, or one whose
+ * content is unusable (over 16 MiB, or no usable <gameList>; logged), returns
+ * true with *present=false and inserts nothing: the caller lists the ROM
+ * files instead. A file that cannot be opened or read (I/O, permission) is
+ * logged and returns false, so the previous cache is kept. Also returns false
+ * for allocation, SQL, bounds or cancellation errors; the caller must roll
+ * back. This does not read the game-detail gamelist.xml.
  */
 bool mainui_gamelist_import(sqlite3 *database, sqlite3_stmt *insert, const char *sd,
                             const char *root, const char *saved_root, bool *present);
@@ -19,7 +23,7 @@ bool mainui_gamelist_import_control(sqlite3 *database, sqlite3_stmt *insert, con
                                     MainUICancel cancel);
 
 /* Independent game-detail data; never stored in cache6.db.
- * Strings are owned inline. Missing/invalid XML clears the complete result.
+ * Strings are owned inline. Missing or unusable XML clears the complete result.
  * The bounded XML subset is shared with import, not the database transaction. */
 typedef struct {
     char genre[4096], rating[8], description[4096];

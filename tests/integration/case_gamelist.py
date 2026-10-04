@@ -30,6 +30,7 @@ def run(*options, code=0):
         cwd=ROOT, timeout=30, capture_output=True,
     )
     assert result.returncode == code, result.stderr.decode(errors="replace")
+    return result.stderr.decode(errors="replace")
 
 
 def rows():
@@ -85,35 +86,105 @@ assert actual == [
 run("--system", "XML test", "--input", "EDE")
 assert XML.read_text(encoding="utf-8") == document
 
-# Malformed XML must not replace the old database, even after valid rows.
-prefix = '<gameList>' + game('./first.nes', 'Uncommitted replacement')
-invalid = [
-    prefix, prefix + '</wrong>', '<gameList/><gameList/>',
-    prefix + '<game><path>bad</name></game></gameList>',
-    prefix + game('./first.nes', '&unknown;') + '</gameList>',
-    prefix + game('./first.nes', '&#0;') + '</gameList>',
-    prefix + game('./first.nes', '&#xD800;') + '</gameList>',
-    prefix + game('./first.nes', 'x' * 4096) + '</gameList>',
-    prefix + '<game><name>x</name><name>y</name></game></gameList>',
-    '<!DOCTYPE gameList [<!ENTITY x SYSTEM "file:///ignored">]><gameList/>',
-    '<gameList>' + '<unknown>' * 33 + '</unknown>' * 33 + '</gameList>',
-    '<gameList><game attr="unfinished', '<gameList>\x00</gameList>',
-    '<gameList><!-- invalid -- comment --></gameList>',
+# Gamelists are read leniently, as stock reads them: Onion's own generator
+# writes names without escaping. Each of these imports its first game.
+def first(name):
+    return [(name, stock_prefix + "./first.nes", "", 0, ".")]
+
+
+prefix = '<gameList>' + game('./first.nes', 'Kept')
+lenient = [
+    (game('./first.nes', 'Sonic & Tails'), "Sonic & Tails"),
+    (game('./first.nes', 'A &unknown; &#0; &#xD800; &amp'), "A &unknown; &#0; &#xD800; &amp"),
+    (game('./first.nes', 'A < B'), "A < B"),
+    (game('./first.nes', 'A <b>bold</b>'), "A <b>bold</b>"),
+    (game('./first.nes', ']]> stray'), "]]> stray"),
+    ('<game><path>./first.nes</path><name>x</name><name>y</name></game>', "x"),
+    ('<game><path>./first.nes</path><name>Unclosed name</game>', "Unclosed name"),
+    ('<game bad attr><path>./first.nes</path><name>Attributes</name></wrong></game>',
+     "Attributes"),
+    (game('./first.nes', 'x' * 4096), "x" * 4092),
 ]
-before = DB.read_bytes()
-for text in invalid:
+for body, name in lenient:
+    XML.write_text('<gameList>' + body + '</gameList>', encoding="utf-8")
+    run("--refresh-caches")
+    assert rows() == first(name), (body[:60], [row[0][:60] for row in rows()])
+documents = [
+    ('<!DOCTYPE gameList [<!ENTITY x SYSTEM "file:///ignored">]><gameList>'
+     + game('./first.nes', '&x;') + '</gameList>', first("&x;")),
+    (prefix, first("Kept")),  # cut off after a whole game
+    (prefix + '</gameList>trailing <junk>', first("Kept")),
+    ('junk <before/>' + prefix + '</gameList>', first("Kept")),
+    ('<gameList/><gameList>' + game('./first.nes', 'Second root') + '</gameList>', []),
+    ('<gameList><!-- invalid -- comment --></gameList>', []),
+]
+for text, expected in documents:
     XML.write_text(text, encoding="utf-8")
-    run("--refresh-caches", code=4)
-    assert DB.read_bytes() == before, text[:80]
+    run("--refresh-caches")
+    assert rows() == expected, (text[:60], rows())
+# Windows-1252 bytes, the usual encoding of a hand-edited list.
+XML.write_bytes(b'<gameList><game><path>./first.nes</path><name>Caf\xe9 \x93Q\x94\x81</name>'
+                b'</game></gameList>')
+run("--refresh-caches")
+assert rows() == first("Caf\u00e9 \u201cQ\u201d\u0081"), rows()
+
+# A list with no usable <gameList> is not imported: the ROM files are listed
+# and the cache is saved, so the console still opens. The XML is untouched.
+for data in (b'', b'   ', b'<gameList>', b'<gameList><game><path>broken', b'not xml',
+             b'<gameList>\x00</gameList>', b'<gameList><game attr="unfinished',
+             b'<gameList>' + b'<unknown>' * 33 + b'</unknown>' * 33 + b'</gameList>',
+             # Found unusable after a game: that game is not imported either.
+             (prefix + '<unknown>' * 33).encode(),
+             b'x' * (16 * 1024 * 1024 + 1)):
+    XML.write_bytes(data)
+    assert "is unusable" in run("--refresh-caches"), data[:40]
+    assert len(rows()) == 9, data[:40]
+    assert XML.read_bytes() == data
     assert not Path(str(DB) + ".building").exists()
 
-# Invalid UTF-8 and oversized inputs also preserve the published cache.
-for data in (b'<gameList>\xff</gameList>', b'<gameList>\xc0\xaf</gameList>',
-             b'<gameList>\xed\xa0\x80</gameList>', b'x' * (16 * 1024 * 1024 + 1)):
-    XML.write_bytes(data)
-    run("--refresh-caches", code=4)
-    assert DB.read_bytes() == before
-    assert not Path(str(DB) + ".building").exists()
+# A path longer than a field holds is never cut to a shorter one: here the
+# first 4,092 bytes name an existing ROM (repeated slashes normalize away),
+# so a cut would import a different file. The game is skipped and the rest of
+# the list still imports. An image that long is dropped, not cut.
+def overlong(target, tail):
+    head = "/mnt/SDCARD/Roms/Jeux"
+    head += "/" * (4092 - len(head.encode()) - len(target.encode())) + target
+    assert len(head.encode()) == 4092
+    return head + tail
+
+
+for path in (overlong("first.nes", "extra"), overlong("café.nes", "é")):
+    XML.write_text('<gameList>' + game(path, 'Overlong') + game('./second.nes', 'Second')
+                   + '</gameList>', encoding="utf-8")
+    assert "skipped a game whose path is longer" in run("--refresh-caches")
+    assert rows() == [("Second", stock_prefix + "./second.nes", "", 0, ".")], rows()
+XML.write_text('<gameList>' + game('./first.nes', 'Long image',
+                                   '<image>' + '/' * 5000 + 'x.png</image>')
+               + '</gameList>', encoding="utf-8")
+run("--refresh-caches")
+assert rows() == first("Long image"), rows()
+
+# A list that cannot be read (an I/O error, injected by read-fault.so) may
+# be fine: the build fails and the previous cache is kept, not replaced by one
+# made from the ROM files.
+XML.write_text('<gameList>' + game('./first.nes', 'Kept') + '</gameList>', encoding="utf-8")
+run("--refresh-caches")
+kept = DB.read_bytes()
+fault = Path(tempfile.mkdtemp(prefix="xml-fault-", dir=BUILD)) / "fault"
+fault.write_text("miyoogamelist.xml eio\n")
+libraries = subprocess.run(["ldd", str(BUILD / "fixture-cache")], check=True,
+                           capture_output=True, text=True).stdout
+asan = next((line.split("=>", 1)[1].split()[0] for line in libraries.splitlines()
+             if "libasan.so" in line), "")
+result = subprocess.run(
+    [str(BUILD / "fixture-cache"), str(SD), "rebuild"], cwd=ROOT, timeout=30,
+    capture_output=True, text=True,
+    env=dict(os.environ, MAINUI_READ_FAULT=str(fault), LD_PRELOAD=" ".join(filter(
+        None, (asan, os.environ.get("LD_PRELOAD"), str(BUILD / "read-fault.so"))))))
+assert result.returncode == 4, (result.returncode, result.stderr)
+assert "could not be read" in result.stderr and "is unusable" not in result.stderr, result.stderr
+assert not fault.exists(), "the read fault was not used"
+assert DB.read_bytes() == kept and rows() == first("Kept")
 
 # A valid empty list is authoritative; removing XML restores filesystem scanning.
 XML.write_text('<gameList/>', encoding="utf-8")
@@ -154,4 +225,5 @@ run("--refresh-caches")
 assert {row[1] for row in rows() if row[3] == 0} == {stock_prefix + path for path in expected}
 
 print("XML import checks passed: names/art, empty images, Unicode/entities/CDATA, nested "
-      "folders, invalid records, rollback, empty list, scan fallback, 10,050 rows")
+      "folders, invalid records, lenient reading, unusable lists, empty list, scan fallback, "
+      "10,050 rows")

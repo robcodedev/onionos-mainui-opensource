@@ -140,15 +140,26 @@ sd = recovery_sd('rebuild')
 steps, recovered = recovery_run(sd, 'recovered', 'U')
 assert steps == ['reloading', 'rebuilding the cache'], steps
 assert recovery_run(sd, 'clean', 'U') == ([], recovered)
-# The rebuild fails (a malformed gamelist): the folder is scanned for the
-# session, still at the same row, and the damaged cache is left as it was.
-sd = recovery_sd('scan', xml='<gameList><game><path>broken')
+# The rebuild fails (another build's reservation is in the way): the folder
+# is scanned for the session, still at the same row, and the damaged cache
+# is left as it was.
+sd = recovery_sd('scan')
+(sd / 'Roms/REC/REC_cache6.db.building').write_text('foreign')
 cache = (sd / 'Roms/REC/REC_cache6.db').read_bytes()
 steps, scanned = recovery_run(sd, 'scanned', 'U')
 assert steps == ['reloading', 'rebuilding the cache', 'scanning the folder'], steps
 assert (sd / 'Roms/REC/REC_cache6.db').read_bytes() == cache
+blocked = recovery_sd('blocked', cache=False)
+(blocked / 'Roms/REC/REC_cache6.db.building').write_text('foreign')
+assert recovery_run(blocked, 'blocked', 'U')[1] == scanned
+# A gamelist with no usable <gameList> does not stop the rebuild: the cache
+# is rebuilt from the ROM files.
 plain = recovery_sd('plain', cache=False)
-assert recovery_run(plain, 'plain', 'U')[1] == scanned
+clean = recovery_run(plain, 'plain', 'U')[1]
+sd = recovery_sd('unusable-xml', xml='<gameList><game><path>broken')
+steps, rebuilt = recovery_run(sd, 'rebuilt', 'U')
+assert steps == ['reloading', 'rebuilding the cache'], steps
+assert rebuilt == clean
 # A failure that is not damaged content (here SQLITE_IOERR for every later
 # page) never replaces the cache: reload, then scan, at the same row.
 sd = recovery_sd('io-error', cache=True)

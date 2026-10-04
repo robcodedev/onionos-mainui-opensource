@@ -11,6 +11,10 @@ Open MainUI writes its diagnostics to stderr. How much of that you can keep depe
 
 A log of at least 1 MiB is moved to `MainUI.log.1` at the next start, so copy the log off the card soon after reproducing the problem.
 
+## A console lists file names instead of its gamelist titles
+
+When a console's `miyoogamelist.xml` cannot be used at all (for example an empty file, or one with no `<gameList>`), the log says `miyoogamelist.xml is unusable (<reason>); listing the ROM files instead`, and the list is built from the file names. The XML is never changed. A file that cannot be read because of a card or permission error is different: the log says `could not be read`, and the previous list is kept. Most sloppy files are read as they are: unescaped `&` or `<` in titles and Windows-1252 accents work. Once the file is fixed, run **Refresh roms** for that console. See [CATALOG_CACHE.md](CATALOG_CACHE.md#xml-import-checkpoint).
+
 ## Resolving an interrupted ROM deletion
 
 Deleting a ROM first renames it to a staged name, `<rom>.mainui-delete.<16 hex digits>`, and records this in a journal next to the console's cache (`<cache>.delete.json`). If the deletion is interrupted, for example by a power cut, Open MainUI finishes or undoes it automatically the next time you enter that console.

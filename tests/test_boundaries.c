@@ -180,6 +180,14 @@ int main(int argc, char **argv)
     assert(!mainui_gamelist_metadata(path, NULL, &metadata) && !metadata.found && !*metadata.genre);
     snprintf(path, sizeof path, "%s/Roms/Bad/bad.nes", sd);
     assert(!mainui_gamelist_metadata(path, NULL, &metadata) && !metadata.found && !*metadata.genre);
+    snprintf(path, sizeof path, "%s/Roms/Cut/cut.nes", sd);
+    assert(mainui_gamelist_metadata(path, NULL, &metadata) && metadata.found);
+    assert(!strcmp(metadata.genre, "Kept"));
+    snprintf(path, sizeof path, "%s/Roms/Loose/loose.nes", sd);
+    assert(mainui_gamelist_metadata(path, NULL, &metadata) && metadata.found);
+    assert(!strcmp(metadata.genre, "Tom & Jerry &nbsp;"));
+    assert(!strcmp(metadata.description, "Caf\xc3\xa9 \xe2\x80\x9c"
+                                         "A < B\xe2\x80\x9d"));
     char root[4096], xml[4096];
     snprintf(root, sizeof root, "%s/Roms/Normal", sd);
     TEST_PATH(path, "%s/Folder/nested00.nes", root);

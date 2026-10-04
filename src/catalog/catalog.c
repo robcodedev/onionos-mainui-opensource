@@ -914,14 +914,14 @@ static bool build_cache_locked(MainUICatalog *catalog, int system, bool replace,
     }
     sqlite3_free(sql);
     int count = 0;
-    bool imported = false, import_failed = false;
+    bool imported = false;
     char rom_prefix[MAINUI_PATH_MAX], image_prefix[MAINUI_PATH_MAX];
     ok = ok && saved_prefix(rom_prefix, catalog, entry, entry->raw_rompath) &&
          saved_prefix(image_prefix, catalog, entry, entry->raw_imgpath);
     if (ok) {
+        /* An unusable gamelist is not imported: its ROM files are listed. */
         ok = mainui_gamelist_import_control(database, insert, catalog->sd, entry->path, rom_prefix,
                                             &imported, catalog->cancel);
-        import_failed = !ok;
     }
     if (ok && !imported) {
         char(*scratch)[MAINUI_PATH_MAX] = malloc(4 * sizeof *scratch);
@@ -980,9 +980,7 @@ static bool build_cache_locked(MainUICatalog *catalog, int system, bool replace,
     }
     if (!ok) {
         snprintf(catalog->error, sizeof catalog->error, "%s",
-                 import_failed
-                     ? "Cannot import miyoogamelist.xml; check for empty, invalid or unreadable XML"
-                     : "ROM cache build failed; previous database retained");
+                 "ROM cache build failed; previous database retained");
     }
     return ok;
 }

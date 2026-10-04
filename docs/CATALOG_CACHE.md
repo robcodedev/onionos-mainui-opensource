@@ -39,20 +39,31 @@ Without XML, only names and directory metadata are scanned; ROM contents are not
 
 ## XML import checkpoint
 
-Missing-cache creation and explicit refresh now prefer `miyoogamelist.xml` in the ROM root. A present valid XML file is authoritative, including an empty `gameList`; unlisted filesystem games are not merged into it. When the file is absent, the existing filtered directory scan runs. `gamelist.xml` details remain independent.
+Missing-cache creation and explicit refresh now prefer `miyoogamelist.xml` in the ROM root. A present usable XML file is authoritative, including an empty `gameList`; unlisted filesystem games are not merged into it. When the file is absent, or present but unusable (see below), the existing filtered directory scan runs. `gamelist.xml` details remain independent.
 
 The importer reads direct `game` children with nonempty `path` and `name`, checks that each ROM exists as a file, and imports `name` and `image`. Missing or empty images store an empty string, never the previous record's image. Paths resolve from the ROM root, with `/mnt/SDCARD/` remapped to the host SD root in development builds. Navigable ancestor folder rows are deduplicated and use the existing relative path/parent keys.
 
-UTF-8 (optional BOM), predefined/numeric entities, comments, attributes and CDATA are supported. Unknown metadata elements are ignored. Input is bounded to 16 MiB, 32 XML element levels, 4,095 UTF-8 bytes per imported field and one million game records. Existing navigation depth bounds also apply. The parser keeps one record and a bounded input buffer; folder deduplication uses a temporary SQLite table. Malformed/unsupported input, invalid UTF-8, oversized fields/files and SQL errors abort the build. The existing transaction and exclusive `.building` publication keep the previous database unchanged. Source XML and ROM contents are not written.
+The XML is read leniently, as stock reads it, since many gamelists are written without escaping (Onion's own `miyoogamelist_gen.sh` writes names as they are):
+
+- UTF-8 (optional BOM), predefined and numeric entities, comments and CDATA are decoded. A bare `&`, an unknown entity or an invalid reference stays as written. A byte that does not start valid UTF-8 is read as Windows-1252, so a hand-edited list in that encoding shows its accents and quotes; control characters are dropped.
+- Inside an imported field only an end tag of an open element is markup: `A < B` and `A <b>x</b>` are text. An end tag closes up to its open element, so a missing `</name>` is closed by `</game>`; a stray end tag is ignored. Attributes are skipped, and `<!DOCTYPE ...>` and other declarations are skipped without expanding anything, so XML cannot trigger file reads.
+- A repeated field keeps its first value. Anything outside the `<gameList>` root is ignored, including a second root. A list cut off after a whole game keeps the games before the cut.
+- A long title, genre, rating or description is cut at a character boundary once it reaches 4,092 UTF-8 bytes (room is kept for a four-byte character within the 4,095-byte field). A path or image that long is never cut, since its first part could name a different file: the game is skipped (with a log line), or keeps no image. A game whose path cannot be stored is skipped too.
+
+A file is unusable when its content cannot be used: it is larger than 16 MiB, nests deeper than 32 element levels, exceeds one million game records, or has no `<gameList>` that was either closed or held a game (for example an empty file or `<gameList>` alone). An unusable file is reported on the log (`miyoogamelist.xml is unusable (<reason>); listing the ROM files instead`), left unchanged, and the cache is built from the ROM files as if it were absent. A dry pass checks the whole file first, so one found unusable halfway leaves no rows behind. To use a fixed file, run Refresh roms.
+
+A file that is present but cannot be opened or read (an I/O or permission error) is different: its content may be fine, so the build fails, the log says `could not be read (<reason>); the previous cache is kept`, and the previous cache stays as it was. A transient card error therefore never replaces a gamelist-based cache with one made from file names.
+
+Existing navigation depth bounds also apply. The parser keeps one record and a bounded input buffer; folder deduplication uses a temporary SQLite table. SQL, allocation and cancellation errors abort the build; the existing transaction and exclusive `.building` publication keep the previous database unchanged. Source XML and ROM contents are not written.
 
 Current compatibility boundaries requiring further reference acceptance:
 
-- Only the ROM-root `miyoogamelist.xml` is selected; emulator `gamelist` overrides and non-UTF-8 encodings are not implemented.
-- This is a bounded XML subset: DTDs/external entities, nested markup in imported fields and duplicate imported fields are rejected. It is not a general XML library.
+- Only the ROM-root `miyoogamelist.xml` is selected; emulator `gamelist` overrides are not implemented. Encodings other than UTF-8 and Windows-1252 are not recognized.
+- This is a lenient, bounded XML subset, not a general XML library: DTDs and external entities are never read.
 - Missing paths/names, missing files, directories and paths outside the ROM root are skipped. Folder rows are derived from imported games; explicit empty XML folder records are not imported. Exact stock edge-case equivalence remains open.
 - Each ROM uses a file-status check. The bounded root filename set optimization and matched device performance remain map is applied separately. Scanning runs on the worker thread and is cancellable.
 
-Run `tests/integration/case_gamelist.py` after `make`. It verifies names, artwork strings, nested folder keys, entities, CDATA, Unicode, missing/empty images, invalid records, malformed/oversized input rollback, unchanged XML, authoritative empty lists, scan fallback, and 10,050-row import plus SDL navigation. Existing core, catalog, cache-build and 13,002-row cache-reader checks also pass.
+Run `tests/integration/case_gamelist.py` after `make`. It verifies names, artwork strings, nested folder keys, entities, CDATA, Unicode, missing/empty images, invalid records, lenient reading of unescaped and Windows-1252 text, unusable lists falling back to the ROM files, unchanged XML, authoritative empty lists, scan fallback, and 10,050-row import plus SDL navigation. Existing core, catalog, cache-build and 13,002-row cache-reader checks also pass.
 
 The [screen contracts](SCREEN_CONTRACTS.md) establish name lookup precedence, parent-row/cache offset separation and independent detail-metadata formats.
 
@@ -60,6 +71,6 @@ The [screen contracts](SCREEN_CONTRACTS.md) establish name lookup precedence, pa
 
 Every real console ROM-list context menu ends with **Refresh roms** (language ID 27), including folder, parent, and empty-list selections. It rebuilds only that console's cache and restores the open folder against the rebuilt cache. The shared console grid offers **Refresh all roms** followed by **Refresh roms** for the selected console. The synthetic ` Search ` console omits only the console-specific action; its grid popup retains **Refresh all roms**. Main-menu **Refresh all roms** keeps its existing scope.
 
-Game details for `Roms/SNES/Sub/Game.sfc` first read `Sub/gamelist.xml` using `Game.sfc`. Missing local XML or no matching game triggers a second lookup in `SNES/gamelist.xml` using `Sub/Game.sfc`. A matching local record wins in full, even when its metadata fields are empty. Malformed local XML remains an error. This detail lookup is independent of `miyoogamelist.xml` cache import.
+Game details for `Roms/SNES/Sub/Game.sfc` first read `Sub/gamelist.xml` using `Game.sfc`. Missing local XML or no matching game triggers a second lookup in `SNES/gamelist.xml` using `Sub/Game.sfc`. A matching local record wins in full, even when its metadata fields are empty. Details use the same lenient reader; a local `gamelist.xml` that is unusable gives no details. This detail lookup is independent of `miyoogamelist.xml` cache import.
 
 **Sort A-Z** in Favorites retains the selected numeric index and viewport instead of following the previously selected game to its new sorted position.

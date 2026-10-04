@@ -63,15 +63,16 @@ cache = roms / "Test_cache6.db"
 with sqlite3.connect(cache) as db:
     assert db.execute("SELECT count(*) FROM Test_roms").fetchone() == (0,)
 
-# Invalid XML must explain the failure and preserve the published cache.
+# An XML with no usable <gameList> is reported and not imported: the ROM
+# files are listed instead, and the XML is left as it is.
 (roms / "one.nes").write_bytes(b"ROM")
-run("cache")
-before = cache.read_bytes()
 xml = roms / "miyoogamelist.xml"
 for text in ("", "   ", "<gameList>"):
     xml.write_text(text)
-    assert "miyoogamelist.xml" in run("cache", 3).stderr
-    assert cache.read_bytes() == before
+    cache.unlink()
+    assert "miyoogamelist.xml is unusable" in run("cache").stderr
+    with sqlite3.connect(cache) as db:
+        assert db.execute("SELECT disp FROM Test_roms").fetchall() == [("one",)]
     assert xml.read_text() == text
 # Valid empty XML stays authoritative, even when a ROM exists.
 xml.write_text("<gameList/>")
@@ -88,10 +89,17 @@ reservation.write_text("foreign")
 run("recover")
 assert not cache.exists() and reservation.read_text() == "foreign"
 reservation.unlink()
-# Existing XML remains authoritative; never silently scan around invalid XML.
+# A present XML is never scanned around when the cache cannot be written,
+# even an unusable one.
 xml.write_text("")
+reservation.write_text("foreign")
 run("recover", 3)
 assert not cache.exists()
+reservation.unlink()
+# Once it can be written, an unusable XML gives a cache of the ROM files.
+assert "is unusable" in run("recover").stderr
+assert cache.exists()
+cache.unlink()
 
 # Symlinked ROM roots must never scan, build, or remove an external cache.
 xml.unlink()

@@ -41,11 +41,15 @@ typedef struct {
     char values[6][MAINUI_PATH_MAX];
     size_t lengths[6];
     bool seen[6];
+    /* A value cut at its buffer's end: fine for text, never for a path. */
+    bool overflow[6];
     MainUIMetadata *metadata;
     MetadataRecord *index;
     uint32_t record_start, record_end;
     const char *filename;
     unsigned records;
+    /* A dry pass only checks that the list is usable; nothing is inserted. */
+    bool dry, closed;
     MainUICancel cancel;
     ImportFolder *folders[IMPORT_FOLDER_BUCKETS];
     size_t index_bytes;
@@ -57,143 +61,173 @@ static bool xml_character(unsigned value)
            (value >= 0xe000 && value <= 0xfffd) || (value >= 0x10000 && value <= 0x10ffff);
 }
 
-/* Validate source UTF-8 before tokenization, including ignored metadata. This
- * excludes overlong encodings, surrogates and forbidden XML control characters. */
-static bool valid_utf8(const unsigned char *text, size_t size)
+/* Windows-1252 code points for 0x80-0x9f; 0 where it defines none. Text that
+ * is not UTF-8 is read as this superset of Latin-1, the usual encoding of a
+ * hand-edited or scraped gamelist, so typographic quotes come out right. */
+static const unsigned short cp1252[32] = {
+    0x20ac, 0,      0x201a, 0x0192, 0x201e, 0x2026, 0x2020, 0x2021, 0x02c6, 0x2030, 0x0160,
+    0x2039, 0x0152, 0,      0x017d, 0,      0,      0x2018, 0x2019, 0x201c, 0x201d, 0x2022,
+    0x2013, 0x2014, 0x02dc, 0x2122, 0x0161, 0x203a, 0x0153, 0,      0x017e, 0x0178};
+
+/* Length of the valid UTF-8 sequence at text, or 0: overlong forms,
+ * surrogates and characters XML forbids are not valid here. */
+static size_t utf8_sequence(const unsigned char *text, size_t size, unsigned *out)
 {
-    for (size_t i = 0; i < size;) {
-        unsigned value = text[i++];
-        unsigned extra = 0, minimum = 0;
-        if (value >= 0xc2 && value <= 0xdf) {
-            extra = 1;
-            minimum = 0x80;
-            value &= 0x1f;
-        }
-        else if (value >= 0xe0 && value <= 0xef) {
-            extra = 2;
-            minimum = 0x800;
-            value &= 0x0f;
-        }
-        else if (value >= 0xf0 && value <= 0xf4) {
-            extra = 3;
-            minimum = 0x10000;
-            value &= 7;
-        }
-        else if (value >= 0x80) {
-            return false;
-        }
-        if (extra > size - i) {
-            return false;
-        }
-        while (extra--) {
-            unsigned next = text[i++];
-            if ((next & 0xc0) != 0x80) {
-                return false;
-            }
-            value = (value << 6) | (next & 0x3f);
-        }
-        if (value < minimum || !xml_character(value)) {
-            return false;
-        }
+    unsigned value = text[0], extra, minimum;
+    if (value >= 0xc2 && value <= 0xdf) {
+        extra = 1;
+        minimum = 0x80;
+        value &= 0x1f;
     }
-    return true;
+    else if (value >= 0xe0 && value <= 0xef) {
+        extra = 2;
+        minimum = 0x800;
+        value &= 0x0f;
+    }
+    else if (value >= 0xf0 && value <= 0xf4) {
+        extra = 3;
+        minimum = 0x10000;
+        value &= 7;
+    }
+    else {
+        return 0;
+    }
+    if (extra >= size) {
+        return 0;
+    }
+    for (size_t i = 1; i <= extra; i++) {
+        if ((text[i] & 0xc0) != 0x80) {
+            return 0;
+        }
+        value = (value << 6) | (text[i] & 0x3f);
+    }
+    if (value < minimum || !xml_character(value)) {
+        return 0;
+    }
+    *out = value;
+    return extra + 1;
 }
 
-/* Decode only predefined entities and numeric references. DTDs and external
- * entities are unsupported, so XML cannot trigger additional file reads. */
-static bool append_text(const char *text, size_t size, bool entities, char *out, size_t *length)
+/* Append one character as UTF-8. Characters XML forbids (control codes) are
+ * dropped. A value too long for its field is cut at a character boundary,
+ * always leaving room for the longest character so the cut is final, and
+ * *overflow records the cut. */
+static void put_character(unsigned value, char *out, size_t *length, bool *overflow)
 {
-    for (size_t i = 0; i < size; i++) {
-        unsigned value = (unsigned char)text[i];
-        char bytes[4] = {(char)value};
-        size_t count = 1;
-        if (entities && value == '&') {
-            size_t start = ++i;
-            while (i < size && text[i] != ';' && i - start < 16) {
-                i++;
-            }
-            if (i == size || text[i] != ';') {
-                return false;
-            }
-            size_t n = i - start;
-            const char *entity = text + start;
-            if (n && entity[0] == '#') {
-                size_t digit = 1;
-                unsigned base = 10;
-                if (digit < n && entity[digit] == 'x') {
-                    base = 16;
-                    digit++;
-                }
-                if (digit == n) {
-                    return false;
-                }
-                value = 0;
-                for (; digit < n; digit++) {
-                    unsigned char c = (unsigned char)entity[digit];
-                    unsigned d = 99;
-                    if (c >= '0' && c <= '9') {
-                        d = c - '0';
-                    }
-                    else if (c >= 'a' && c <= 'f') {
-                        d = c - 'a' + 10;
-                    }
-                    else if (c >= 'A' && c <= 'F') {
-                        d = c - 'A' + 10;
-                    }
-                    if (d >= base || value > (0x10ffff - d) / base) {
-                        return false;
-                    }
-                    value = value * base + d;
-                }
-            }
-            else if (n == 3 && !memcmp(entity, "amp", n)) {
-                value = '&';
-            }
-            else if (n == 2 && !memcmp(entity, "lt", n)) {
-                value = '<';
-            }
-            else if (n == 2 && !memcmp(entity, "gt", n)) {
-                value = '>';
-            }
-            else if (n == 4 && !memcmp(entity, "quot", n)) {
-                value = '"';
-            }
-            else if (n == 4 && !memcmp(entity, "apos", n)) {
-                value = '\'';
-            }
-            else {
-                return false;
-            }
-            if (!xml_character(value)) {
-                return false;
-            }
-            if (value < 0x80) {
-                bytes[0] = (char)value;
-            }
-            else {
-                count = value < 0x800 ? 2 : value < 0x10000 ? 3 : 4;
-                unsigned remaining = value;
-                for (size_t j = count - 1; j; j--) {
-                    bytes[j] = (char)(0x80 | (remaining & 63));
-                    remaining >>= 6;
-                }
-                unsigned prefix = count == 2 ? 0xc0 : count == 3 ? 0xe0 : 0xf0;
-                bytes[0] = (char)(prefix | remaining);
-            }
+    if (!out || !xml_character(value)) {
+        return;
+    }
+    if (*length + 4 >= MAINUI_PATH_MAX) {
+        *overflow = true;
+        return;
+    }
+    size_t count = value < 0x80 ? 1 : value < 0x800 ? 2 : value < 0x10000 ? 3 : 4;
+    char *bytes = out + *length;
+    unsigned remaining = value;
+    for (size_t j = count - 1; j; j--) {
+        bytes[j] = (char)(0x80 | (remaining & 63));
+        remaining >>= 6;
+    }
+    bytes[0] = (char)(count == 1   ? remaining
+                      : count == 2 ? 0xc0 | remaining
+                      : count == 3 ? 0xe0 | remaining
+                                   : 0xf0 | remaining);
+    *length += count;
+    out[*length] = 0;
+}
+
+/* The character a reference names, or 0 when the text at text[0] == '&' is
+ * not a reference: a bare & stays text, as stock reads it. Only predefined
+ * entities and numeric references are decoded; DTDs and external entities
+ * are never read, so XML cannot trigger additional file reads. */
+static size_t reference(const char *text, size_t size, unsigned *out)
+{
+    size_t end = 1;
+    while (end < size && end <= 17 && text[end] != ';') {
+        end++;
+    }
+    if (end >= size || text[end] != ';') {
+        return 0;
+    }
+    const char *entity = text + 1;
+    size_t n = end - 1;
+    unsigned value = 0;
+    if (n && entity[0] == '#') {
+        size_t digit = 1;
+        unsigned base = 10;
+        if (digit < n && entity[digit] == 'x') {
+            base = 16;
+            digit++;
         }
-        else if (value < 32 && !xml_character(value)) {
-            return false;
+        if (digit == n) {
+            return 0;
         }
-        if (out) {
-            if (*length + count >= MAINUI_PATH_MAX) {
-                return false;
+        for (; digit < n; digit++) {
+            unsigned char c = (unsigned char)entity[digit];
+            unsigned d = c >= '0' && c <= '9'   ? c - '0' + 0u
+                         : c >= 'a' && c <= 'f' ? c - 'a' + 10u
+                         : c >= 'A' && c <= 'F' ? c - 'A' + 10u
+                                                : 99u;
+            if (d >= base || value > (0x10ffff - d) / base) {
+                return 0;
             }
-            memcpy(out + *length, bytes, count);
-            *length += count;
-            out[*length] = 0;
+            value = value * base + d;
+        }
+        if (!xml_character(value)) {
+            return 0;
         }
     }
-    return true;
+    else if (n == 3 && !memcmp(entity, "amp", n)) {
+        value = '&';
+    }
+    else if (n == 2 && !memcmp(entity, "lt", n)) {
+        value = '<';
+    }
+    else if (n == 2 && !memcmp(entity, "gt", n)) {
+        value = '>';
+    }
+    else if (n == 4 && !memcmp(entity, "quot", n)) {
+        value = '"';
+    }
+    else if (n == 4 && !memcmp(entity, "apos", n)) {
+        value = '\'';
+    }
+    else {
+        return 0;
+    }
+    *out = value;
+    return end + 1;
+}
+
+/* Decode text leniently, as stock reads gamelists: nothing here fails. An
+ * unknown or unfinished reference stays as written, and a byte that does not
+ * start valid UTF-8 is read as Windows-1252. */
+static void append_text(const char *text, size_t size, bool entities, char *out, size_t *length,
+                        bool *overflow)
+{
+    if (!out) {
+        return;
+    }
+    for (size_t i = 0; i < size;) {
+        unsigned char c = (unsigned char)text[i];
+        unsigned value = c;
+        size_t used = 1;
+        if (entities && c == '&') {
+            size_t n = reference(text + i, size - i, &value);
+            used = n ? n : 1;
+        }
+        else if (c >= 0x80) {
+            size_t n = utf8_sequence((const unsigned char *)text + i, size - i, &value);
+            if (n) {
+                used = n;
+            }
+            else if (c < 0xa0 && cp1252[c - 0x80]) {
+                value = cp1252[c - 0x80];
+            }
+        }
+        put_character(value, out, length, overflow);
+        i += used;
+    }
 }
 
 static bool insert_row(Import *import, const char *label, const char *path, const char *image,
@@ -459,11 +493,23 @@ static bool import_game(Import *import)
     if (++import->records > (import->metadata ? 32768u : 1000000u)) {
         return false;
     }
+    /* A path or image cut at the buffer's end names a different file, so it
+     * is never used: the game is skipped, or keeps no image. */
+    if (import->overflow[0]) {
+        if (!import->dry && !import->metadata) {
+            fprintf(stderr, "%s: skipped a game whose path is longer than %d bytes\n", import->root,
+                    MAINUI_PATH_MAX - 1);
+        }
+        import->values[0][0] = 0;
+    }
+    if (import->overflow[2]) {
+        import->values[2][0] = 0;
+    }
     if (import->metadata) {
         return metadata_game(import);
     }
     const char *path = import->values[0], *label = import->values[1];
-    if (!*path || !*label) {
+    if (import->dry || !*path || !*label) {
         return true;
     }
     char resolved[MAINUI_PATH_MAX], relative[MAINUI_PATH_MAX], parent[MAINUI_PATH_MAX] = ".";
@@ -479,7 +525,7 @@ static bool import_game(Import *import)
     }
     int n = snprintf(relative, sizeof relative, "%s", resolved + root_length + 1);
     if (n < 0 || n >= (int)sizeof relative) {
-        return false;
+        return true; /* A record that cannot be represented is skipped. */
     }
     int depth = 0;
     for (const char *slash = strchr(relative, '/'); slash; slash = strchr(slash + 1, '/')) {
@@ -515,14 +561,14 @@ static bool import_game(Import *import)
     n = snprintf(stored, sizeof stored, "%s%s%s", *path == '/' ? "" : import->saved_root,
                  *path == '/' ? "" : "/", path);
     if (n < 0 || n >= (int)sizeof stored) {
-        return false;
+        return true;
     }
     const char *art = import->values[2];
     if (*art) {
         n = snprintf(image, sizeof image, "%s%s%s", *art == '/' ? "" : import->saved_root,
                      *art == '/' ? "" : "/", art);
         if (n < 0 || n >= (int)sizeof image) {
-            return false;
+            image[0] = 0; /* Too long to store: no image, as when none is given. */
         }
     }
     return insert_row(import, label, stored, image, 0, parent);
@@ -535,6 +581,7 @@ static void whitespace(const char **cursor)
     }
 }
 
+/* An element name; one longer than 63 bytes is read whole and kept cut. */
 static bool name(const char **cursor, char out[64])
 {
     const char *start = *cursor;
@@ -542,25 +589,72 @@ static bool name(const char **cursor, char out[64])
         return false;
     }
     while (**cursor && (isalnum((unsigned char)**cursor) || strchr("_:-.", **cursor))) {
-        if (*cursor - start >= 63) {
-            return false;
-        }
         (*cursor)++;
     }
     size_t size = (size_t)(*cursor - start);
+    if (size > 63) {
+        size = 63;
+    }
     memcpy(out, start, size);
     out[size] = 0;
     return true;
 }
 
-/* Bounded event parser retains one record, not a DOM. Unknown metadata is
- * ignored after syntax checks; nested markup in imported fields is rejected. */
+/* At "</": the depth the end tag closes to (the innermost open element of its
+ * name), or -1 when it is no end tag of an open element. *after is past '>'. */
+static int end_tag(const char *cursor, char stack[][64], int depth, const char **after)
+{
+    char tag[64];
+    cursor += 2;
+    if (!name(&cursor, tag)) {
+        return -1;
+    }
+    whitespace(&cursor);
+    if (*cursor != '>') {
+        return -1;
+    }
+    *after = cursor + 1;
+    for (int i = depth - 1; i >= 0; i--) {
+        if (!strcmp(stack[i], tag)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* Close open elements down to depth `to`; a <game> that closes is imported.
+ * cursor is just past the markup that closed it. */
+static bool close_to(Import *import, char stack[][64], int *depth, int to, const char *base,
+                     const char *cursor)
+{
+    for (; *depth > to; (*depth)--) {
+        if (*depth == 2 && !strcmp(stack[1], "game")) {
+            import->record_end = (uint32_t)(cursor - base);
+            if (!import_game(import)) {
+                return false;
+            }
+        }
+    }
+    if (!*depth) {
+        import->closed = true;
+    }
+    return true;
+}
+
+/* Bounded event parser retaining one record, not a DOM. It reads gamelists
+ * leniently, as stock does, since many are written without escaping: inside
+ * a field only an end tag of an open element is markup, so "A < B" and
+ * "Sonic & Tails" are text; an end tag closes up to its open element and a
+ * stray one is ignored; anything outside the <gameList> root is ignored.
+ * Returns false only for a list that has no usable <gameList> (one that was
+ * neither closed nor held a game), the nesting bound, or an import error. */
 static bool parse(Import *import, const char *cursor)
 {
     const char *base = cursor;
     char stack[XML_DEPTH][64];
     int depth = 0, field = -1;
     bool root_seen = false;
+    import->closed = false;
     if (!strncmp(cursor, "\xef\xbb\xbf", 3)) {
         cursor += 3;
     }
@@ -573,150 +667,151 @@ static bool parse(Import *import, const char *cursor)
             if (!end) {
                 end = cursor + strlen(cursor);
             }
-            for (const char *check = cursor; end - check >= 3; check++) {
-                if (!memcmp(check, "]]>", 3)) {
-                    return false;
-                }
-            }
-            if (!depth) {
-                whitespace(&cursor);
-                if (cursor != end) {
-                    return false;
-                }
-            }
-            else if (!append_text(cursor, (size_t)(end - cursor), true,
-                                  field >= 0 ? import->values[field] : NULL,
-                                  field >= 0 ? &import->lengths[field] : NULL)) {
-                return false;
+            if (field >= 0) {
+                append_text(cursor, (size_t)(end - cursor), true, import->values[field],
+                            &import->lengths[field], &import->overflow[field]);
             }
             cursor = end;
             continue;
         }
-        if (!strncmp(cursor, "<!--", 4) || !strncmp(cursor, "<?", 2)) {
-            bool comment = cursor[1] == '!';
-            const char *end = strstr(cursor + (comment ? 4 : 2), comment ? "--" : "?>");
-            if (!end || (comment && end[2] != '>')) {
-                return false;
-            }
-            cursor = end + (comment ? 3 : 2);
-            continue;
-        }
-        if (!strncmp(cursor, "<![CDATA[", 9)) {
-            const char *end = strstr(cursor + 9, "]]>");
-            if (!depth || !end ||
-                !append_text(cursor + 9, (size_t)(end - cursor - 9), false,
-                             field >= 0 ? import->values[field] : NULL,
-                             field >= 0 ? &import->lengths[field] : NULL)) {
-                return false;
+        if (!strncmp(cursor, "<!--", 4)) {
+            const char *end = strstr(cursor + 4, "-->");
+            if (!end) {
+                break;
             }
             cursor = end + 3;
             continue;
         }
-        const char *tag_start = cursor;
-        cursor++;
-        bool closing = *cursor == '/';
-        if (closing) {
-            cursor++;
+        if (!strncmp(cursor, "<![CDATA[", 9)) {
+            const char *end = strstr(cursor + 9, "]]>");
+            if (!end) {
+                end = cursor + strlen(cursor);
+            }
+            if (field >= 0) {
+                append_text(cursor + 9, (size_t)(end - cursor - 9), false, import->values[field],
+                            &import->lengths[field], &import->overflow[field]);
+            }
+            cursor = *end ? end + 3 : end;
+            continue;
         }
+        const char *after = NULL;
+        int closes = cursor[1] == '/' ? end_tag(cursor, stack, depth, &after) : -1;
+        if (field >= 0 && closes < 0) {
+            append_text("<", 1, false, import->values[field], &import->lengths[field],
+                        &import->overflow[field]);
+            cursor++;
+            continue;
+        }
+        if (closes >= 0) {
+            field = -1;
+            if (!close_to(import, stack, &depth, closes, base, after)) {
+                return false;
+            }
+            cursor = after;
+            if (!depth) {
+                break; /* The root closed; whatever follows is ignored. */
+            }
+            continue;
+        }
+        if (cursor[1] == '?' || cursor[1] == '!' || cursor[1] == '/') {
+            /* Declarations such as DOCTYPE (never expanded), processing
+             * instructions and stray end tags. */
+            const char *end = strstr(cursor, cursor[1] == '?' ? "?>" : ">");
+            if (!end) {
+                break;
+            }
+            cursor = end + (cursor[1] == '?' ? 2 : 1);
+            continue;
+        }
+        const char *tag_start = cursor;
+        const char *p = cursor + 1;
         char tag[64];
-        if (!name(&cursor, tag)) {
+        if (!name(&p, tag)) {
+            cursor++; /* A lone '<' outside a field: text, ignored here. */
+            continue;
+        }
+        /* Attributes are not used; skip to the end of the tag. */
+        const char *end = strchr(p, '>');
+        if (!end) {
+            break;
+        }
+        bool empty = end > p && end[-1] == '/';
+        cursor = end + 1;
+        if (!depth && strcmp(tag, "gameList")) {
+            continue; /* Outside the root. */
+        }
+        if (!depth) {
+            root_seen = true;
+            if (empty) {
+                import->closed = true;
+                break;
+            }
+        }
+        if (depth == XML_DEPTH) {
             return false;
         }
-        if (closing) {
-            whitespace(&cursor);
-            if (*cursor++ != '>' || !depth || strcmp(tag, stack[depth - 1])) {
-                return false;
+        int opened = -1;
+        if (depth == 1 && !strcmp(tag, "game")) {
+            import->record_start = (uint32_t)(tag_start - base);
+            memset(import->values, 0, sizeof import->values);
+            memset(import->lengths, 0, sizeof import->lengths);
+            memset(import->seen, 0, sizeof import->seen);
+            memset(import->overflow, 0, sizeof import->overflow);
+        }
+        if (depth == 2 && !strcmp(stack[1], "game")) {
+            if (!strcmp(tag, "path")) {
+                opened = 0;
+            }
+            else if (!strcmp(tag, "name")) {
+                opened = 1;
+            }
+            else if (!strcmp(tag, "image")) {
+                opened = 2;
+            }
+            else if (import->metadata && !strcmp(tag, "genre")) {
+                opened = 3;
+            }
+            else if (import->metadata && !strcmp(tag, "rating")) {
+                opened = 4;
+            }
+            else if (import->metadata && !strcmp(tag, "desc")) {
+                opened = 5;
+            }
+            if (opened >= 0) {
+                /* A repeated field keeps its first value. */
+                if (import->seen[opened]) {
+                    opened = -1;
+                }
+                else {
+                    import->seen[opened] = true;
+                }
             }
         }
-        else {
-            if (depth == XML_DEPTH || field >= 0) {
-                return false;
-            }
-            if (!depth && (root_seen || strcmp(tag, "gameList"))) {
-                return false;
-            }
-            if (!depth) {
-                root_seen = true;
-            }
-            if (depth == 1 && !strcmp(tag, "game")) {
-                import->record_start = (uint32_t)(tag_start - base);
-                memset(import->values, 0, sizeof import->values);
-                memset(import->lengths, 0, sizeof import->lengths);
-                memset(import->seen, 0, sizeof import->seen);
-            }
-            if (depth == 2 && !strcmp(stack[1], "game")) {
-                if (!strcmp(tag, "path")) {
-                    field = 0;
-                }
-                else if (!strcmp(tag, "name")) {
-                    field = 1;
-                }
-                else if (!strcmp(tag, "image")) {
-                    field = 2;
-                }
-                else if (import->metadata && !strcmp(tag, "genre")) {
-                    field = 3;
-                }
-                else if (import->metadata && !strcmp(tag, "rating")) {
-                    field = 4;
-                }
-                else if (import->metadata && !strcmp(tag, "desc")) {
-                    field = 5;
-                }
-                if (field >= 0) {
-                    if (import->seen[field]) {
-                        return false;
-                    }
-                    import->seen[field] = true;
-                }
-            }
-            strcpy(stack[depth++], tag);
-            while (*cursor && *cursor != '>' && *cursor != '/') {
-                const char *before = cursor;
-                whitespace(&cursor);
-                if (*cursor == '>' || *cursor == '/') {
-                    break;
-                }
-                char attribute[64];
-                if (cursor == before || !name(&cursor, attribute)) {
-                    return false;
-                }
-                whitespace(&cursor);
-                if (*cursor++ != '=') {
-                    return false;
-                }
-                whitespace(&cursor);
-                char quote = *cursor++;
-                if (quote != '\'' && quote != '"') {
-                    return false;
-                }
-                const char *end = strchr(cursor, quote);
-                if (!end || memchr(cursor, '<', (size_t)(end - cursor)) ||
-                    !append_text(cursor, (size_t)(end - cursor), true, NULL, NULL)) {
-                    return false;
-                }
-                cursor = end + 1;
-            }
-            closing = *cursor == '/';
-            if (closing) {
-                cursor++;
-            }
-            if (*cursor++ != '>') {
-                return false;
-            }
+        if (empty) {
+            continue;
         }
-        if (closing) {
-            if (depth == 2 && !strcmp(stack[1], "game") &&
-                (import->record_end = (uint32_t)(cursor - base), !import_game(import))) {
-                return false;
-            }
-            if (depth == 3) {
-                field = -1;
-            }
-            depth--;
-        }
+        strcpy(stack[depth++], tag);
+        field = opened;
     }
-    return root_seen && !depth;
+    return root_seen && (import->closed || import->records);
+}
+
+/* An unusable list is not imported: the caller lists the ROM files instead. */
+static bool unusable(const char *path, const char *reason, bool *present)
+{
+    fprintf(stderr, "%s is unusable (%s); listing the ROM files instead\n", path, reason);
+    *present = false;
+    return true;
+}
+
+/* A list that cannot be opened or read (I/O, permission) may be fine: the
+ * build fails, so the previous cache is kept rather than replaced by one made
+ * from the ROM files. */
+static bool unreadable(const char *path, int error)
+{
+    fprintf(stderr, "%s could not be read (%s); the previous cache is kept\n", path,
+            strerror(error));
+    return false;
 }
 
 bool mainui_gamelist_import_control(sqlite3 *database, sqlite3_stmt *insert, const char *sd,
@@ -730,8 +825,11 @@ bool mainui_gamelist_import_control(sqlite3 *database, sqlite3_stmt *insert, con
     }
     FILE *file = fopen(path, "rb");
     if (!file) {
-        *present = errno != ENOENT;
-        return !*present;
+        if (errno == ENOENT) {
+            *present = false;
+            return true;
+        }
+        return unreadable(path, errno);
     }
     char *data = malloc(XML_LIMIT + 1);
     if (!data) {
@@ -739,9 +837,18 @@ bool mainui_gamelist_import_control(sqlite3 *database, sqlite3_stmt *insert, con
         return false;
     }
     size_t size = fread(data, 1, XML_LIMIT, file);
-    bool ok = !ferror(file) && fgetc(file) == EOF && valid_utf8((const unsigned char *)data, size);
+    bool large = !ferror(file) && fgetc(file) != EOF;
+    int error = ferror(file) ? (errno ? errno : EIO) : 0;
     fclose(file);
     data[size] = 0;
+    if (error) {
+        free(data);
+        return unreadable(path, error);
+    }
+    if (large) {
+        free(data);
+        return unusable(path, "larger than 16 MiB", present);
+    }
     Import *import = calloc(1, sizeof *import);
     if (!import) {
         free(data);
@@ -753,14 +860,23 @@ bool mainui_gamelist_import_control(sqlite3 *database, sqlite3_stmt *insert, con
     import->root = root;
     import->saved_root = saved_root;
     import->cancel = cancel;
+    /* A dry pass first, so a list found unusable halfway leaves no rows. */
+    import->dry = true;
+    bool ok = parse(import, data);
+    if (!ok) {
+        bool cancelled = mainui_cancelled(cancel);
+        free(import);
+        free(data);
+        return cancelled ? false : unusable(path, "no readable <gameList>", present);
+    }
+    import->dry = false;
+    import->records = 0;
     /* Folder deduplication lives in SQLite instead of a growing heap model.
      * This temporary table never reaches the published cache file. */
-    if (ok) {
-        ok = sqlite3_exec(database, "CREATE TEMP TABLE mainui_xml_folders(path TEXT PRIMARY KEY)",
-                          NULL, NULL, NULL) == SQLITE_OK &&
-             sqlite3_prepare_v2(database, "INSERT OR IGNORE INTO mainui_xml_folders VALUES (?1)",
-                                -1, &import->folder, NULL) == SQLITE_OK;
-    }
+    ok = sqlite3_exec(database, "CREATE TEMP TABLE mainui_xml_folders(path TEXT PRIMARY KEY)", NULL,
+                      NULL, NULL) == SQLITE_OK &&
+         sqlite3_prepare_v2(database, "INSERT OR IGNORE INTO mainui_xml_folders VALUES (?1)", -1,
+                            &import->folder, NULL) == SQLITE_OK;
     if (ok) {
         ok = parse(import, data);
     }
@@ -859,8 +975,7 @@ static MetadataIndex *get_index(const char *path, MainUIFileStamp stamp)
         import->metadata = unused;
         import->index = records;
     }
-    bool ok = text && records && import && unused &&
-              valid_utf8((const unsigned char *)text, strlen(text)) && parse(import, text) &&
+    bool ok = text && records && import && unused && parse(import, text) &&
               mainui_file_stamp_equal(stamp, mainui_file_stamp(path));
     size_t record_count = import ? import->records : 0;
     free(import);
@@ -961,8 +1076,8 @@ static bool read_metadata(const char *directory, size_t directory_length, const 
             import->metadata = &pending;
             import->filename = key;
         }
-        ok = ok && import && valid_utf8((const unsigned char *)text, record.length + 21) &&
-             parse(import, text) && mainui_file_stamp_equal(stamp, mainui_file_stamp(path));
+        ok = ok && import && parse(import, text) &&
+             mainui_file_stamp_equal(stamp, mainui_file_stamp(path));
         free(import);
         free(text);
         if (!ok) {

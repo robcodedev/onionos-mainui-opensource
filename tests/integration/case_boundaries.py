@@ -60,7 +60,14 @@ write(SD / "Roms/Normal/gamelist.xml",
       '<gameList><game id="1"><path>./ALPHA.nes</path><genre>Action &amp; Arcade</genre>'
       '<rating>0.45</rating><desc><![CDATA[CafÃ© <test> ' + 'Description text. ' * 160 +
       ']]></desc></game><game><path>zulu.nes</path></game></gameList>')
-write(SD / "Roms/Bad/gamelist.xml", '<gameList><game><path>bad.nes</path><genre>Stale</genre></game>')
+# No <gameList> at all: unusable. A list cut off after a whole game keeps it.
+write(SD / "Roms/Bad/gamelist.xml", 'gameList><game><path>bad.nes</path><genre>Stale</genre></game>')
+write(SD / "Roms/Cut/gamelist.xml", '<gameList><game><path>cut.nes</path><genre>Kept</genre></game>')
+# Written without escaping, in Windows-1252: read as stock reads it.
+(SD / "Roms/Loose").mkdir(parents=True)
+(SD / "Roms/Loose/gamelist.xml").write_bytes(
+    b'<gameList><game><path>loose.nes</path><genre>Tom & Jerry &nbsp;</genre>'
+    b'<desc>Caf\xe9 \x93A < B\x94</desc></game></gameList>')
 (SD / "MapMissing/BIOS/arcade_lists").mkdir(parents=True)
 write(SD / "MapLarge/BIOS/arcade_lists/arcade-rom-names.txt",
       ''.join(f'key{i} "' + 'Long name ' * 7 + '"\n' for i in range(66000)) +
