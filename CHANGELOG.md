@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.4 - 2026-10-04
+
+### Game lists
+
+* A console whose `miyoogamelist.xml` is not strictly valid XML opens again. 1.0.3 refused the whole file on any flaw, so the console showed "Catalog unavailable" after every Refresh roms or reinstall; Onion's own gamelist generator writes such files. The file is now read as stock reads it: an unescaped `&` or `<` in a title, an unknown entity such as `&nbsp;`, Windows-1252 accents and quotes, a missing end tag, a repeated field and text outside the list are all accepted. Game details read `gamelist.xml` the same way. Thanks to @Zazzago for the report ([Amiga500/Onion#238](https://github.com/Amiga500/Onion/issues/238)).
+* A `miyoogamelist.xml` that cannot be used at all (empty, over 16 MiB, or without a usable `<gameList>`) no longer blocks its console either: the list is built from the ROM files, the log says why, and the file is left as it is. Run Refresh roms after fixing it. A gamelist that cannot be read because of a card or permission error is not treated this way: the previous list is kept, so a passing error never replaces the gamelist titles with file names. See [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md).
+
+### ROM list caches
+
+* A console whose cache opens but whose first page holds a damaged row is repaired again: its cache is rebuilt once, as when the cache does not open at all. Before, MainUI scanned the folder instead, on every entry, so the console seemed to refresh each time it was opened. A busy, I/O or memory error still never replaces a cache.
+* When a list page cannot be read and recovery ends by scanning the console's folder, that scan now lasts for the current visit only. Before, the console's cache stayed unused until MainUI restarted, so one passing error made it rescan on every entry.
+
+### Lists and navigation
+
+* Reopening Favorites or Recents after its last entry went (for example a Favorite removed from its console list) no longer leaves an empty row below the list. Returning from a game to Favorites, Recents, a ROM list or Apps that lost entries meanwhile fills the window the same way.
+
+### Screens
+
+* A message too long for one line wraps instead of being cut off at the edge of its panel, and the panel grows down when it needs more lines. Before, "Cannot import miyoogamelist.xml; check for empty, invalid or unreadable XML" was cut off at "check for emp".
+
+### Logging
+
+* With Onion's logging on, the log now starts with the version, the device and the SD card and theme in use, and records, one line each: every message shown on screen, every ROM cache built or removed and why, a failed folder read, search, refresh or repair with its console, why a screen could not be restored after a game, a console listed by scanning its folder, a file that could not be saved, a setting that could not be saved, and an interrupted ROM deletion resolved. Nothing is logged per frame or per key press. [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) explains how to read it, and that Onion deletes `MainUI.log` at every boot.
+
 ## 1.0.3 - 2026-10-03
 
 ### Themes and Settings

@@ -6,7 +6,7 @@ Written in C11 against SDL 1.2, the same libraries Onion already ships.
 
 Based on functionality from the [patched MainUI project](https://github.com/robcodedev/onionos-mainui-patcher).
 
-**Version 1.0.3.** It runs on hardware and is usable, but keep a copy of your original SD card.
+**Version 1.0.4.** It runs on hardware and is usable, but keep a copy of your original SD card.
 
 ## Why
 
