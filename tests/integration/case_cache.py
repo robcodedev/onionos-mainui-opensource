@@ -82,9 +82,11 @@ run('empty','empty')
 run('repaired','corrupt',corrupt=True)
 run('repaired','wrong-schema',wrong=True)
 run('fallback', 'wal', wal=True)
-run('fallback','invalid-row',[row(1,'Invalid','./x.nes',9)])
-run('fallback','nul-row',[row(1,'bad\0label','./x.nes')])
-run('fallback','long-row',[row(1,'x'*4096,'./x.nes')])
+# A first page with a row the reader rejects is damaged content: the cache is
+# rebuilt once and read again, as when it does not open.
+run('repaired','invalid-row',[row(1,'Invalid','./x.nes',9)])
+run('repaired','nul-row',[row(1,'bad\0label','./x.nes')])
+run('repaired','long-row',[row(1,'x'*4096,'./x.nes')])
 run('bad-later','bad-later',[row(i+1,f'Game {i:03d}','./x.nes' if i<69 else '') for i in range(70)])
 run('sort','sort',[row(i+1,label,f'./{i}.nes') for i,label in enumerate(['alpha','ALPHA','beta','Zebra'])])
 # Real SDL rendering exercises the former fixed-size list boundary and cross-window navigation.

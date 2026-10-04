@@ -1358,16 +1358,28 @@ bool mainui_catalog_enter(MainUICatalog *catalog, int index)
                 catalog->depth++;
                 return true;
             }
+            /* The database opened but its first page did not load. Only
+             * damaged content (a row the reader rejects, or SQLite corruption)
+             * is repaired, as when it does not open; a busy, I/O or memory
+             * failure never replaces the cache. */
+            bool damaged = next->entries && mainui_cache_damaged(next->cache);
             free(next->entries);
             next->entries = NULL;
             mainui_cache_close(next->cache);
             next->cache = NULL;
+            if (damaged && !pending_delete && !catalog->depth && !rebuilt &&
+                !search_database(catalog, next->path) && !mainui_cancelled(catalog->cancel)) {
+                rebuilt = true;
+                if (mainui_catalog_repair_cache(catalog, index)) {
+                    goto retry_cache;
+                }
+            }
         }
         else if (!pending_delete && !catalog->depth && !rebuilt &&
                  !search_database(catalog, next->path) && !mainui_cancelled(catalog->cancel) &&
                  cache_needs_repair(next->cache_file, next->cache_table)) {
             rebuilt = true;
-            if (mainui_catalog_build_cache(catalog, index, true)) {
+            if (mainui_catalog_repair_cache(catalog, index)) {
                 goto retry_cache;
             }
         }
