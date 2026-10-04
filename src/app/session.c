@@ -267,6 +267,9 @@ bool mainui_session_restore_control(MainUISession *out, const char *sd, bool sen
             if (row >= 0) {
                 mainui_viewport_move(&pending.view, rows, row - pending.view.selected, false);
             }
+            /* The list may have shrunk while away: no gap below its end. */
+            mainui_viewport_refit(&pending.view, pending.library->visible_count, rows,
+                                  pending.view.selected);
         }
     }
     else if (section == MAINUI_MENU_GAMES || section == MAINUI_MENU_EXPERT ||
@@ -356,6 +359,12 @@ bool mainui_session_restore_control(MainUISession *out, const char *sd, bool sen
                         break;
                     }
                 }
+            }
+            /* A ROM or app list may have shrunk while away; the console grid
+             * is aligned by mainui_browser_grid_restore() below instead. */
+            if (pending.catalog->depth || section == MAINUI_MENU_APPS) {
+                mainui_viewport_refit(&pending.view, mainui_browser_count(pending.catalog),
+                                      visible_rows, pending.view.selected);
             }
         }
     }

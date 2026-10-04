@@ -821,6 +821,10 @@ bool mainui_screen_home_key(MainUIApp *ui, SDLKey key, int requested_section)
             MainUIViewport saved = ui->saved_library_views[ui->library->recent ? 1 : 0];
             mainui_viewport_restore(&ui->view, ui->library->visible_count, ui->config.rows,
                                     saved.selected, saved.start, saved.end);
+            /* The list may be shorter now (a Favorite removed from a console
+             * list): close the gap the old window would leave below it. */
+            mainui_viewport_refit(&ui->view, ui->library->visible_count, ui->config.rows,
+                                  ui->view.selected);
             ui->home = false;
             ui->cached_start = -1;
             if (ui->heading) {
