@@ -344,9 +344,39 @@ static bool recent_unlocked(const char *sd, const cJSON *record)
     return ok;
 }
 
-bool mainui_recent_add(const char *sd, const cJSON *record)
+/* Put the record's line before the list's lines, which stay byte for byte. */
+static bool recent_push_unlocked(const char *sd, const cJSON *record)
 {
-    if (!recent_game(record)) {
+    char path[4096];
+    int n = snprintf(path, sizeof path, "%s/Roms/recentlist.json", sd);
+    if (n < 0 || n >= (int)sizeof path) {
+        return false;
+    }
+    const size_t limit = 8u * 1024u * 1024u;
+    errno = 0;
+    char *input = mainui_read_text(path, limit);
+    if (!input && errno != ENOENT) {
+        return false;
+    }
+    char *row = cJSON_PrintUnformatted(record);
+    size_t length = input ? strlen(input) : 0, size = row ? strlen(row) : 0;
+    char *output = row && size + 1 + length <= limit ? malloc(size + 1 + length + 1) : NULL;
+    bool ok = output != NULL;
+    if (ok) {
+        memcpy(output, row, size);
+        output[size] = '\n';
+        memcpy(output + size + 1, input ? input : "", length + 1);
+        ok = mainui_write_text_atomic(path, output);
+    }
+    free(output);
+    free(row);
+    free(input);
+    return ok;
+}
+
+static bool recent_locked(const char *sd, const cJSON *record, bool push)
+{
+    if (!push && !recent_game(record)) {
         return true;
     }
     if (!sd || !*sd) {
@@ -358,7 +388,17 @@ bool mainui_recent_add(const char *sd, const cJSON *record)
         return false;
     }
     MainUIFileLock *lock = mainui_file_lock(path);
-    bool ok = lock && recent_unlocked(sd, record);
+    bool ok = lock && (push ? recent_push_unlocked(sd, record) : recent_unlocked(sd, record));
     mainui_file_unlock(lock);
     return ok;
+}
+
+bool mainui_recent_add(const char *sd, const cJSON *record)
+{
+    return recent_locked(sd, record, false);
+}
+
+bool mainui_recent_push(const char *sd, const cJSON *record)
+{
+    return recent_locked(sd, record, true);
 }

@@ -93,7 +93,10 @@ char *mainui_state_json(const MainUIStack *state)
             return NULL;
         }
     }
-    char *result = cJSON_PrintUnformatted(root);
+    /* One field per line, as stock writes it: Onion's Game List Options reads
+     * the second "type" line with grep and sed to tell which list the game
+     * came from, and on one line it finds none. */
+    char *result = cJSON_Print(root);
     cJSON_Delete(root);
     return result;
 }

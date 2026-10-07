@@ -19,4 +19,10 @@ bool mainui_saved_action_locked(const char *sd, bool recent, MainUISavedAction a
                                 const cJSON *record);
 /* Prepend a committed game launch, promote duplicates, retain at most 50. */
 bool mainui_recent_add(const char *sd, const cJSON *record);
+/* For a Y launch: Onion's Game List Options removes the first line of the
+ * Recents list, taken to be this launch, so the record's line goes first and
+ * the list's lines stay as they are, duplicates and all; Recents skips a
+ * repeated game when it reads the list. Fails, writing nothing, when the
+ * list cannot be read or would pass 8 MiB. */
+bool mainui_recent_push(const char *sd, const cJSON *record);
 #endif

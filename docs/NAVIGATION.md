@@ -23,6 +23,7 @@ This applies to ROM lists, Favorites, Recents, Apps and Search results.
 | Down / Up | The next / previous row. From the last row it wraps to the first, and from the first to the last. |
 | R / L | One page (a screen of rows) down / up, stopping at the first and last row. |
 | Right | Opens the details of the selected game in game lists. |
+| Y | Launches the selected game as A does, in ROM lists, Favorites, Recents and Search results, as stock does. With Onion's default keymap (`mainui_button_y` set to `glo`), Onion then opens Game List Options for that game instead of starting it. Y on a folder or `..` does nothing. Game List Options removes the first line of `recentlist.json`, taken to be this launch, so Y puts the game's line first and leaves the other lines as they are: backing out leaves Recents unchanged. That line is written before the launch: if it cannot be, nothing is launched (A still is). When a Y launch fails, keymon's Y flag is cleared, and every other launch clears it too: keymon sets it on any Y press, also one MainUI ignores (on a folder, say), and only B or X clear it, so A starts the game instead of opening Game List Options. |
 
 The window scrolls only as far as needed to keep the selected row on screen. A row that is already visible never moves the window.
 

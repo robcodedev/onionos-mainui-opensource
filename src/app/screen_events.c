@@ -1128,6 +1128,28 @@ static void dispatch_key(MainUIApp *ui, SDL_Event *event)
         ui->letter_jump.active = false;
         return;
     }
+    /* Y on a game launches it as A does, as in stock: Onion's keymon sets
+     * /tmp/launch_alt on Y, and runtime.sh then opens Game List Options for
+     * the launched game instead of starting it (#14). On a folder or ".."
+     * Y does nothing. */
+    if (game_list && key == SDLK_LALT) {
+        bool game = ui->view.selected >= 0 &&
+                    (ui->library ? ui->view.selected < ui->library->visible_count &&
+                                       !mainui_library_is_folder(ui->library, ui->view.selected)
+                                 : ui->catalog && ui->catalog->depth && !*ui->catalog->error &&
+                                       mainui_browser_index(ui->catalog, ui->view.selected) >= 0 &&
+                                       !mainui_browser_folder(ui->catalog, ui->view.selected));
+        if (game && !was_held && ui->handoff_dir) {
+            ui->launch_source.alternate = true;
+            ui->launch_pending =
+                mainui_session_launch(ui->handoff_dir, &ui->launch_source, NULL, ui->message_body);
+            ui->launch_source.alternate = false;
+            if (!ui->launch_pending) {
+                snprintf(ui->message_title, sizeof ui->message_title, "Launch unavailable");
+            }
+        }
+        return;
+    }
     if (game_list && (key == SDLK_PAGEUP || key == SDLK_PAGEDOWN)) {
         if (!ui->letter_jump.active) {
             mainui_letter_jump_begin(&ui->letter_jump, ui->view.selected, ui->view.total,

@@ -38,6 +38,7 @@ typedef struct {
     const MainUISearch *search;
     const char *sd;
     bool home_only;
+    bool alternate; /* Y: Onion's Game List Options follows the launch */
 } MainUILaunchSource;
 
 /* Optional record overrides the selected row for registered context launchers.

@@ -2,7 +2,9 @@
 #include "app/session.h"
 #include "app/positions.h"
 #include "catalog/saved_actions.h"
+#include "platform/files.h"
 #include "platform/launch.h"
+#include <errno.h>
 #include <limits.h>
 #include <math.h>
 #include <stdio.h>
@@ -447,12 +449,31 @@ bool mainui_session_launch(const char *directory, const MainUILaunchSource *sour
             fprintf(stderr, "Could not save ROM-list position; launching anyway.\n");
         }
     }
+    const char *sd = source->sd ? source->sd : source->catalog ? source->catalog->sd : NULL;
+    /* keymon arms its Y flag on any Y press, also one MainUI ignores (on a
+     * folder, say), and clears it only on B or X. Any other launch is not a
+     * Y launch: an armed flag would open Game List Options instead, which
+     * also removes the first Recent. */
+    char flag[4096];
+    bool flag_path = snprintf(flag, sizeof flag, "%s/launch_alt", directory) < (int)sizeof flag;
+    if (ok && !source->alternate && flag_path && remove(flag) != 0 && errno != ENOENT) {
+        ok = false;
+        snprintf(error, 256, "Cannot clear the Y launch flag.");
+    }
+    /* After a Y launch Onion's Game List Options removes the first line of
+     * Recents, taken to be this launch: it must be there before the launch is
+     * published, or GLO would remove another game. If the launch then fails,
+     * the line stays: Recents skips the repeated game. */
+    if (ok && source->alternate && !mainui_recent_push(sd, record)) {
+        ok = false;
+        snprintf(error, 256, "Recents cannot be written.");
+    }
     ok = ok && mainui_launch_publish(directory, record, &legacy, resume, error);
-    if (ok) {
-        const char *sd = source->sd ? source->sd : source->catalog ? source->catalog->sd : NULL;
-        if (!mainui_recent_add(sd, record)) {
-            fprintf(stderr, "Cannot save Recent game; launch handoff remains committed.\n");
-        }
+    if (ok && !source->alternate && !mainui_recent_add(sd, record)) {
+        fprintf(stderr, "Cannot save Recent game; launch handoff remains committed.\n");
+    }
+    if (!ok && source->alternate && flag_path) {
+        mainui_remove_file(flag); /* the next launch must not open Game List Options */
     }
     if (!ok && !*error) {
         snprintf(error, 256, "Cannot prepare a launch from this row.");
