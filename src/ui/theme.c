@@ -62,6 +62,7 @@ static size_t image_bytes(const MainUITheme *t)
         bytes +=
             surface_bytes(t->tiles[i]) + surface_bytes(t->dots[i]) + surface_bytes(t->buttons[i]);
     }
+    bytes += surface_bytes(t->expert_selection) + surface_bytes(t->popup_dim);
     for (int i = 0; i < SET_COUNT; ++i) {
         bytes += surface_bytes(t->settings_artwork.icons[i]);
     }
@@ -722,10 +723,11 @@ bool mainui_theme_open_sd(MainUITheme *t, const char *dir, const char *base, con
     if (t->expert_font) {
         TTF_SetFontStyle(t->expert_font, TTF_STYLE_BOLD);
     }
+    /* Hint text (footer hints, counter, dialog actions) has its own font, as
+     * stock's label font: hint.font, or without one the default font
+     * (Exo 2 Bold Italic, or the language font), never the title's. Its
+     * style is the font file's own. */
     const char *hint_face = json_string(hint, "font");
-    if (!hint_face) {
-        hint_face = json_string(title, "font");
-    }
     t->hint_font = font_open(t, hint_face, hint_size);
     if (t->grid_font) {
         TTF_SetFontStyle(t->grid_font, TTF_STYLE_BOLD);
@@ -742,7 +744,7 @@ bool mainui_theme_open_sd(MainUITheme *t, const char *dir, const char *base, con
     const cJSON *battery = cJSON_GetObjectItemCaseSensitive(root, "batteryPercentage");
     const char *battery_face = json_string(battery, "font");
     if (!battery_face) {
-        battery_face = hint_face;
+        battery_face = hint_face ? hint_face : json_string(title, "font");
     }
     int battery_size = json_int(battery, "size", 24);
     if (battery_size < 1 || battery_size > 120) {
@@ -764,6 +766,8 @@ bool mainui_theme_open_sd(MainUITheme *t, const char *dir, const char *base, con
     cJSON_Delete(root);
     t->tiles[0] = mainui_theme_image(t, "skin/bg-game-item-n.png");
     t->tiles[1] = mainui_theme_image(t, "skin/bg-game-item-f.png");
+    /* Expert marks only its selected cell, with its own 214x120 artwork. */
+    t->expert_selection = mainui_theme_image(t, "skin/bg-ra-list-item.png");
     t->dots[0] = mainui_theme_image(t, "skin/dot-n.png");
     t->dots[1] = mainui_theme_image(t, "skin/dot-a.png");
     t->buttons[0] = mainui_theme_image(t, "skin/icon-A-54.png");
@@ -869,6 +873,12 @@ void mainui_theme_close(MainUITheme *t)
         if (t->battery_icons[i]) {
             SDL_FreeSurface(t->battery_icons[i]);
         }
+    }
+    if (t->expert_selection) {
+        SDL_FreeSurface(t->expert_selection);
+    }
+    if (t->popup_dim) {
+        SDL_FreeSurface(t->popup_dim);
     }
     for (int i = 0; i < 2; i++) {
         if (t->tiles[i]) {

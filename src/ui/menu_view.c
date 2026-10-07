@@ -398,8 +398,15 @@ void mainui_menu_draw_systems(MainUIMenuView *view, SDL_Surface *screen, MainUIC
         int selected = position->start + i == position->selected;
         int x = (expert ? 0 : 10) + (i % columns) * width;
         int y = (expert ? 60 : 75) + (i / columns) * height;
-        SDL_Surface *tile = theme->tiles[selected], *icon = view->console_icons[i][selected];
-        if (tile) {
+        SDL_Surface *icon = view->console_icons[i][selected];
+        if (expert) {
+            SDL_Surface *mark = selected ? theme->expert_selection : NULL;
+            if (mark) {
+                blit(screen, mark, x + (width - mark->w) / 2, y + (height - mark->h) / 2);
+            }
+        }
+        else if (theme->tiles[selected]) {
+            SDL_Surface *tile = theme->tiles[selected];
             blit(screen, tile, x + (width - tile->w) / 2 + 2, y + (height - tile->h) / 2 + 2);
         }
         if (icon) {

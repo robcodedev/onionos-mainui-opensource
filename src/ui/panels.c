@@ -7,18 +7,20 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void list_frame(SDL_Surface *screen, MainUITheme *theme, const char *title)
+/* current/total is the footer counter; total -1 shows none. */
+static void list_frame(SDL_Surface *screen, MainUITheme *theme, const char *title, int current,
+                       int total)
 {
     SDL_FillRect(screen, NULL, SDL_MapRGB(screen->format, 24, 24, 24));
     mainui_blit(screen, theme->background, 0, 0);
     mainui_draw_header(screen, theme, title);
-    mainui_draw_footer(screen, theme, 0, -1);
+    mainui_draw_footer(screen, theme, current, total);
 }
 
 void mainui_draw_settings(SDL_Surface *screen, MainUITheme *theme,
                           const MainUIStockSettings *settings)
 {
-    list_frame(screen, theme, mainui_translate(15, "Settings"));
+    list_frame(screen, theme, mainui_translate(15, "Settings"), 0, -1);
     const MainUISettingsArtwork *art = mainui_theme_settings_artwork(theme);
     SDL_Surface *selection = art->selection;
     int start = settings->start;
@@ -130,7 +132,9 @@ void mainui_draw_apps(SDL_Surface *screen, MainUITheme *theme, MainUICatalog *ap
                       const MainUIViewport *view)
 {
     bool used[4] = {false};
-    list_frame(screen, theme, mainui_translate(107, "Apps"));
+    /* Stock counts Apps rows as it counts games: 10/15 on row 10 of 15. */
+    list_frame(screen, theme, mainui_translate(107, "Apps"), view->total ? view->selected + 1 : 0,
+               view->total ? view->total : -1);
     if (!view->total) {
         mainui_draw_empty(screen, theme);
         return;
@@ -163,7 +167,8 @@ void mainui_draw_apps(SDL_Surface *screen, MainUITheme *theme, MainUICatalog *ap
         if (!app) {
             continue;
         }
-        int y = 62 + (i - view->start) * 90;
+        /* Four 90px rows fill the content area, 60..419, as stock. */
+        int y = 60 + (i - view->start) * 90;
         SDL_Rect clip = {0, (Sint16)y, 640, (Uint16)(y + 90 > 420 ? 420 - y : 90)};
         SDL_SetClipRect(screen, &clip);
         if (i == view->selected) {
@@ -322,7 +327,7 @@ void mainui_draw_message(SDL_Surface *screen, MainUITheme *theme, const char *ti
 
 void mainui_draw_languages(SDL_Surface *screen, MainUITheme *theme, const MainUILanguages *list)
 {
-    list_frame(screen, theme, mainui_translate(23, "Change language"));
+    list_frame(screen, theme, mainui_translate(23, "Change language"), 0, -1);
     SDL_Surface *selection = mainui_theme_image(theme, "skin/bg-list-s.png");
     int start = list->start;
     for (int i = start; i < list->count && i < start + 6; i++) {

@@ -150,7 +150,8 @@ menu(["apps"])
 apps = capture("apps", "E")
 assert apps.getpixel((639, 240)) == DIVIDER
 assert has_color(apps, DESCRIPTION, (0, 100, 640, 150))
-# Binary 0x20090..0x203dc: fixed icon lane, text x111, row top62, desc y107.
+# Binary 0x20090..0x203dc: fixed icon lane, text x111. Rows start at y 60, so
+# the fourth 90px row ends at 419 instead of being cut off; desc y105.
 icon_color = (203, 71, 9)
 icon_path = SD / "App/Example/icon.png"
 Image.new("RGB", (64, 64), icon_color).save(icon_path)
@@ -158,16 +159,18 @@ write(SD / "App/Example/config.json", json.dumps(dict(
     label="Example", description="App description", launch="launch.sh", icon="icon.png")))
 with_icon = capture("apps-fixed-icon", "E")
 assert with_icon.getpixel((20, 75)) == icon_color
-assert with_icon.getpixel((83, 138)) == icon_color
+assert with_icon.getpixel((83, 136)) == icon_color
+assert with_icon.getpixel((83, 137)) != icon_color
 assert with_icon.getpixel((19, 75)) != icon_color
 assert not has_color(with_icon, DESCRIPTION, (0, 60, 111, 150))
-assert has_color(with_icon, DESCRIPTION, (111, 107, 640, 150))
+assert has_color(with_icon, DESCRIPTION, (111, 105, 640, 150))
 # Both oversized dimensions use the stock centered 71px source crop at row top.
 Image.new("RGB", (120, 120), icon_color).save(icon_path)
 oversized = capture("apps-cropped-icon", "E")
-assert oversized.getpixel((20, 62)) == icon_color
-assert oversized.getpixel((90, 132)) == icon_color
-assert oversized.getpixel((91, 132)) != icon_color
+assert oversized.getpixel((20, 60)) == icon_color
+assert oversized.getpixel((20, 59)) != icon_color
+assert oversized.getpixel((90, 130)) == icon_color
+assert oversized.getpixel((91, 130)) != icon_color
 
 
 menu(["settings"], ["display", "brightness", "sound", "sleep", "about"])

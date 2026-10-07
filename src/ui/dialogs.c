@@ -5,11 +5,28 @@
 #include <stdio.h>
 #include <string.h>
 
+void mainui_dim_popup_background(SDL_Surface *screen, MainUITheme *theme)
+{
+    if (!theme->popup_dim) {
+        SDL_PixelFormat *format = screen->format;
+        theme->popup_dim = SDL_CreateRGBSurface(SDL_SWSURFACE, 640, 420, format->BitsPerPixel,
+                                                format->Rmask, format->Gmask, format->Bmask, 0);
+        if (!theme->popup_dim) {
+            return;
+        }
+        SDL_FillRect(theme->popup_dim, NULL, SDL_MapRGB(theme->popup_dim->format, 0, 0, 0));
+        SDL_SetAlpha(theme->popup_dim, SDL_SRCALPHA, 0xaa);
+    }
+    SDL_Rect destination = {0, 0, 0, 0};
+    SDL_BlitSurface(theme->popup_dim, NULL, screen, &destination);
+}
+
 void mainui_draw_context(SDL_Surface *screen, MainUITheme *theme, const MainUIContext *context)
 {
     if (!context->visible_count) {
         return;
     }
+    mainui_dim_popup_background(screen, theme);
     mainui_draw_popup_footer(screen, theme);
     int rows = context->visible_count < 6 ? context->visible_count : 6;
     SDL_Surface *background = mainui_theme_popup_background(theme, rows);

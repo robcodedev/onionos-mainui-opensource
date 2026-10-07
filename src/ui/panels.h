@@ -11,6 +11,9 @@ void mainui_draw_list_header_image(SDL_Surface *screen, MainUITheme *theme, SDL_
 void mainui_draw_header(SDL_Surface *screen, MainUITheme *theme, const char *title);
 void mainui_draw_catalog_loading(SDL_Surface *screen, MainUITheme *theme, bool cancelling);
 void mainui_draw_confirmation(SDL_Surface *screen, MainUITheme *theme, int title_id, int body_id);
+/* Darken everything but the footer (0,0)-(640,420) with black at 0xAA alpha,
+ * as stock does before it draws a popup. */
+void mainui_dim_popup_background(SDL_Surface *screen, MainUITheme *theme);
 void mainui_draw_context(SDL_Surface *screen, MainUITheme *theme, const MainUIContext *context);
 void mainui_draw_languages(SDL_Surface *screen, MainUITheme *theme, const MainUILanguages *list);
 void mainui_draw_footer(SDL_Surface *screen, MainUITheme *theme, int page, int total);
