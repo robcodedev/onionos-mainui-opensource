@@ -103,9 +103,10 @@ int main(int argc, char **argv)
     assert(mainui_browser_enter(catalog, &view, 6));
     assert(mainui_browser_back(catalog, &view));
     assert(!memcmp(&saved, &view, sizeof view));
-    view.selected = find(catalog, "Empty");
+    view.selected = find(catalog, "Disc");
     assert(mainui_browser_enter(catalog, &view, 6));
-    assert(view.total == 1 && !strcmp(mainui_browser_label(catalog, 0), ".."));
+    assert(view.total == 2 && !strcmp(mainui_browser_label(catalog, 0), "..") &&
+           !strcmp(mainui_browser_label(catalog, 1), "Sub"));
     assert(mainui_browser_enter(catalog, &view, 6));
     mainui_catalog_close(catalog);
     memset(catalog, 0, sizeof *catalog);

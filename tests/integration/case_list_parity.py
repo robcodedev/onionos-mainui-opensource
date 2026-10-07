@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """Verify actual fixture configuration, list counters, empty art and shoulder navigation."""
+from contextlib import closing
 import json
 import os
 from pathlib import Path
 import shutil
+import sqlite3
 import subprocess
 import tempfile
 
@@ -35,6 +37,7 @@ def make_sd(name, labels, folder=False, fixture_config=False):
         (sd / "Roms/FC" / (label + ".nes")).write_bytes(b"")
     if folder:
         (sd / "Roms/FC/Folder").mkdir()
+        (sd / "Roms/FC/Folder/Inner.nes").write_bytes(b"")
     if fixture_config:
         source = FIXTURE_SD / ".tmp_update/config"
         for filename in (".romListRows", ".romListTitleScroll", ".romListFontSize"):
@@ -63,6 +66,11 @@ assert first.crop((500, 420, 640, 480)).tobytes() == folder_first.crop((500, 420
 last = capture(plain, "last", "U")
 folder_last = capture(folders, "folder-last-rom", "U")
 assert last.crop((500, 420, 640, 480)).tobytes() == folder_last.crop((500, 420, 640, 480)).tobytes()
+# A folder with nothing below it is no longer added to a cache, but one can
+# still be in a cache built by an older version: its page shows Empty.png.
+with closing(sqlite3.connect(folders / "Roms/FC/FC_cache6.db")) as database:
+    database.execute("DELETE FROM FC_roms WHERE ppath='Folder'")
+    database.commit()
 empty = capture(folders, "empty-folder", "E")
 assert empty.getpixel((270, 200)) == (30, 210, 80)
 assert empty.getpixel((369, 279)) == (30, 210, 80)

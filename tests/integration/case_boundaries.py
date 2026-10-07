@@ -43,7 +43,7 @@ shutil.copyfile(THEME / "py.dat", SD / "miyoo/app/py.dat")
 config("Emu/Normal", "Normal", "../../Roms/Normal", shortname=1)
 for name in ("alpha.nes", "zulu.nes"):
     write(SD / "Roms/Normal" / name, "")
-(SD / "Roms/Normal/Empty").mkdir()
+write(SD / "Roms/Normal/Disc/Sub/disc.nes", "")  # a folder with only a folder of ROMs
 for index in range(70):
     write(SD / f"Roms/Normal/Folder/nested{index:02}.nes", "")
 for index in range(10):

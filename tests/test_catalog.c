@@ -67,7 +67,8 @@ int main(int argc, char **argv)
     c->pages[0].view.selected = nes;
     assert(nes >= 0 && mainui_catalog_enter(c, nes));
     MainUICatalogPage *p = &c->pages[c->depth];
-    assert(p->count == 5); /* Two folders, three supported games; no art/hidden files. */
+    assert(p->count == 5); /* Two folders holding ROMs, three supported games; no art,
+                              * hidden files, empty or data folders. */
     assert(p->entries[0].directory && !strcmp(p->entries[0].label, "Collections"));
     assert(!strcmp(p->entries[2].label, "Adventure"));
     assert(!strcmp(p->entries[3].label, "alpha"));
@@ -106,8 +107,10 @@ int main(int argc, char **argv)
     cJSON_Delete(record);
     assert(mainui_catalog_back(c) && mainui_catalog_back(c));
     assert(c->pages[1].view.selected == 4);
-    assert(mainui_catalog_enter(c, find(&c->pages[1], "Empty")));
-    assert(c->pages[2].count == 0);
+    assert(find(&c->pages[1], "Empty") < 0 && find(&c->pages[1], "Data") < 0);
+    assert(mainui_catalog_enter(c, find(&c->pages[1], "Sets")));
+    assert(c->pages[2].count == 1 && c->pages[2].entries[0].directory &&
+           !strcmp(c->pages[2].entries[0].label, "Inner"));
     assert(mainui_catalog_back(c));
     /* Failed scans retain the parent and don't publish a partial child page. */
     char *saved = c->pages[1].entries[0].path;

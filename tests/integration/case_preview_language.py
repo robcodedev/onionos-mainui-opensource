@@ -16,7 +16,7 @@ THEME = ONION_THEME
 for name in ['Emu/FC', 'Roms/FC/Folder', 'Roms/FC/Imgs', '.tmp_update/config', 'miyoo/app/lang']:
     (SD/name).mkdir(parents=True)
 (SD/'Emu/FC/config.json').write_text(json.dumps(dict(label='NES',rompath='../../Roms/FC',imgpath='../../Roms/FC/Imgs',extlist='nes')))
-for name in ['A.nes','B.nes']: (SD/'Roms/FC'/name).write_bytes(b'')
+for name in ['A.nes','B.nes','Folder/C.nes']: (SD/'Roms/FC'/name).write_bytes(b'')
 # Indexed PNG exercises palette normalization as well as downscaling.
 Image.new('RGB',(500,400),(255,0,0)).convert('P').save(SD/'Roms/FC/Imgs/A.png')
 CONFIG=SD/'.tmp_update/config/main-menu.json'

@@ -17,6 +17,11 @@ for system,label,extensions in [('FC','NES','nes|zip'),('GB','Game Boy','gb'),('
 # Imgs and Manuals folders, in any case, are never listed as ROM folders.
 for name in ['Adventure.nes','alpha.zip','Zebra.NES','ignored.txt','Imgs/cover.nes','Manuals/Guide.nes','Collections/Nested.nes','Collections/More/Deep.nes','Collections/manuals/Inner.nes']:
  p=sd/'Roms/FC'/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'')
+# A folder is listed only with a ROM somewhere below it: Sets is (through
+# Inner), the empty Empty and the game data folder Data (no nes or zip in it,
+# as a ScummVM game's AUDIO or DRIVERS) are not.
+for name in ['Sets/Inner/Game.nes','Data/readme.txt','Data/AUDIO/track.wav']:
+ p=sd/'Roms/FC'/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'')
 (sd/'Roms/FC/Empty').mkdir()
 subprocess.run([str(BUILD / "fixture-catalog"),str(sd)],cwd=ROOT,check=True,timeout=30)
 db=sd/'Roms/FC/FC_cache6.db'
@@ -27,6 +32,8 @@ with sqlite3.connect(db) as c:
  assert c.execute("select count(*) from sqlite_master where name='mainui_rom_browse'").fetchone()==(1,)
  assert c.execute("select path from FC_roms where ppath='Collections/More'").fetchone()==('/mnt/SDCARD/Emu/FC/../../Roms/FC/Collections/More/Deep.nes',)
  assert c.execute("select count(*) from FC_roms where path like '%anuals%'").fetchone()==(0,)
+ assert c.execute("select count(*) from FC_roms where path like '%/Empty' or path like '%/Data%'").fetchone()==(0,)
+ assert c.execute("select disp,type from FC_roms where ppath='Sets'").fetchall()==[('Inner',1)]
 print('Created cache schema, index, nested keys and integrity verified')
 
 xml_sd = Path(tempfile.mkdtemp(prefix='catalog-xml-record-', dir=BUILD))

@@ -712,11 +712,15 @@ static bool saved_prefix(char out[MAINUI_PATH_MAX], const MainUICatalog *catalog
 }
 
 /* Cache rows carry stock saved identities. Recursion is bounded and each folder
- * releases its decoded entries before returning. ROM files are never opened. */
+ * releases its decoded entries before returning. ROM files are never opened.
+ * A folder gets a row only when a ROM matching the console's extlist lies
+ * somewhere below it, so game data folders (a ScummVM game's AUDIO or
+ * DRIVERS, a port's data) and empty folders are not listed; *found counts
+ * the ROMs added below path. Its row is added after its subtree. */
 static bool cache_scan(sqlite3_stmt *insert, MainUICatalog *catalog, const char *root,
                        const char *path, const char *extensions, const char *images, int depth,
-                       int *count, bool shortname, const char *rom_prefix, const char *image_prefix,
-                       char scratch[4][MAINUI_PATH_MAX])
+                       int *count, int *found, bool shortname, const char *rom_prefix,
+                       const char *image_prefix, char scratch[4][MAINUI_PATH_MAX])
 {
     if (depth >= MAINUI_STACK_MAX || mainui_cancelled(catalog->cancel)) {
         return false;
@@ -737,6 +741,18 @@ static bool cache_scan(sqlite3_stmt *insert, MainUICatalog *catalog, const char 
             break;
         }
         MainUIEntry *entry = &page->entries[i];
+        if (entry->directory) {
+            int below = 0;
+            ok = cache_scan(insert, catalog, root, entry->path, extensions, images, depth + 1,
+                            count, &below, shortname, rom_prefix, image_prefix, scratch);
+            if (!ok || !below) {
+                continue;
+            }
+            *found += below;
+        }
+        else {
+            ++*found;
+        }
         /* Nested ppath follows the verified one-level stock convention;
          * deeper folder layouts have not been verified against stock. */
         snprintf(parent, MAINUI_PATH_MAX, "%s",
@@ -781,10 +797,6 @@ static bool cache_scan(sqlite3_stmt *insert, MainUICatalog *catalog, const char 
              sqlite3_bind_text(insert, 6, pinyin, -1, SQLITE_TRANSIENT) == SQLITE_OK &&
              sqlite3_bind_text(insert, 7, pinyin, -1, SQLITE_TRANSIENT) == SQLITE_OK &&
              sqlite3_step(insert) == SQLITE_DONE;
-        if (ok && entry->directory) {
-            ok = cache_scan(insert, catalog, root, entry->path, extensions, images, depth + 1,
-                            count, shortname, rom_prefix, image_prefix, scratch);
-        }
     }
     close_page(page);
     free(page);
@@ -954,9 +966,10 @@ static bool build_cache_locked(MainUICatalog *catalog, int system, bool replace,
     }
     if (ok && !imported) {
         char(*scratch)[MAINUI_PATH_MAX] = malloc(4 * sizeof *scratch);
+        int found = 0;
         ok = scratch &&
              cache_scan(insert, catalog, entry->path, entry->path, entry->extensions, entry->images,
-                        0, &count, entry->shortname, rom_prefix, image_prefix, scratch);
+                        0, &count, &found, entry->shortname, rom_prefix, image_prefix, scratch);
         free(scratch);
     }
     sqlite3_finalize(insert);
