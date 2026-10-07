@@ -95,7 +95,7 @@ int main(int argc, char **argv)
     initialize(&theme, active, fallback);
     assert(mainui_theme_popup_background(&theme, 6)->w == 111);
     mainui_theme_close(&theme);
-    /* Profile overrides affect skin images, not theme configuration or fonts. */
+    /* Profile skin images override the theme's, and are cached per open. */
     const char *parts[] = {"Saves", "Saves/CurrentProfile", "Saves/CurrentProfile/theme",
                            "Saves/CurrentProfile/theme/skin"};
     for (size_t i = 0; i < sizeof parts / sizeof *parts; i++) {
@@ -191,7 +191,8 @@ int main(int argc, char **argv)
     mainui_theme_close(&theme);
     assert(remove(path) == 0);
     assert(mainui_theme_open_sd(&theme, active, builtin, root, &config));
-    assert(TTF_FontHeight(theme.font) == font_height);
+    /* The profile's config.json (Tweaks' theme overrides) applied list.size 99. */
+    assert(TTF_FontHeight(theme.font) < font_height);
     mainui_theme_close(&theme);
     snprintf(path, sizeof path, "%s/config.json", active);
     file = fopen(path, "wb");
@@ -200,8 +201,41 @@ int main(int argc, char **argv)
     assert(mainui_theme_open_sd(&theme, active, builtin, root, &config));
     assert(theme.font && TTF_FontFaceFamilyName(theme.font));
     mainui_theme_close(&theme);
+    /* Tweaks' overrides apply field by field, as Onion's theme_applyConfig():
+     * the battery size changes, its alignment and colour stay the theme's, and
+     * a hideLabels override of icons keeps hints from hideIconTitle. */
+    file = fopen(path, "wb");
+    assert(file &&
+           fputs("{\"hideIconTitle\":true,\"batteryPercentage\":{\"visible\":true,"
+                 "\"size\":20,\"textAlign\":\"right\",\"color\":\"#102030\"}}",
+                 file) >= 0 &&
+           fclose(file) == 0);
+    assert(mainui_theme_open_sd(&theme, active, builtin, root, &config));
+    int theme_battery = TTF_FontHeight(theme.battery_font);
+    assert(theme.hide_icons && theme.hide_hints);
+    mainui_theme_close(&theme);
+    char overrides[1024];
+    TEST_PATH(overrides, "%s/config.json", profile);
+    file = fopen(overrides, "wb");
+    assert(file &&
+           fputs("{\"batteryPercentage\":{\"size\":40},\"hideLabels\":{\"icons\":false}}", file) >=
+               0 &&
+           fclose(file) == 0);
+    assert(mainui_theme_open_sd(&theme, active, builtin, root, &config));
+    assert(TTF_FontHeight(theme.battery_font) > theme_battery);
+    assert(theme.battery_visible && theme.battery_align == 2 && theme.battery_color.r == 0x10);
+    assert(!theme.hide_icons && theme.hide_hints);
+    mainui_theme_close(&theme);
+    /* An override file that is not a JSON object is ignored. */
+    file = fopen(overrides, "wb");
+    assert(file && fputs("not json", file) >= 0 && fclose(file) == 0);
+    assert(mainui_theme_open_sd(&theme, active, builtin, root, &config));
+    assert(TTF_FontHeight(theme.battery_font) == theme_battery && theme.hide_icons);
+    mainui_theme_close(&theme);
+    assert(remove(overrides) == 0);
     TTF_Quit();
     SDL_Quit();
-    puts("Artwork reuse, cached misses, theme invalidation and popup fallback passed");
+    puts("Artwork reuse, cached misses, theme invalidation, popup fallback and theme overrides "
+         "passed");
     return 0;
 }

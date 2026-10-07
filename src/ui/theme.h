@@ -75,7 +75,9 @@ typedef struct {
 bool mainui_theme_open(MainUITheme *theme, const char *directory, const char *fallback,
                        const MainUIConfig *config);
 /* Explicit SD root enables profile artwork and device-absolute font mapping.
- * Profile overrides affect images only. Closing/reopening invalidates caches. */
+ * The profile's images replace the theme's, and its config.json is merged
+ * over the theme's (apply_overrides in theme.c). Closing/reopening
+ * invalidates caches. */
 bool mainui_theme_open_sd(MainUITheme *theme, const char *directory, const char *fallback,
                           const char *sd, const MainUIConfig *config);
 /* Resolve a configured font path; loading failure uses the built-in default. */

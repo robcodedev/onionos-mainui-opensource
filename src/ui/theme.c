@@ -6,6 +6,7 @@
 #include "platform/system_config.h"
 #include "ui/artwork.h"
 #include "ui/drawing.h"
+#include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -526,6 +527,82 @@ static SDL_Color theme_color(const cJSON *object, const char *key, SDL_Color fal
     return fallback;
 }
 
+/* Onion's Tweaks (Appearance > Theme overrides) saves overrides in the
+ * profile's theme/config.json, and Onion applies that file over the theme's
+ * config field by field (theme_loadFromPath() -> theme_applyConfig()). Merge
+ * it the same way: each field in an object of the overrides replaces the
+ * theme's, other fields of that object stay; a top-level value replaces the
+ * theme's. A missing file changes nothing; an unusable one is logged. */
+static void apply_overrides(const MainUITheme *t, cJSON **root)
+{
+    char path[4096];
+    if (!*t->profile || !join(path, t->profile, "config.json")) {
+        return;
+    }
+    errno = 0;
+    char *text = mainui_read_text(path, 1024 * 1024);
+    if (!text) {
+        if (errno != ENOENT) {
+            fprintf(stderr, "[theme] overrides in %s not used: %s\n", path,
+                    errno ? strerror(errno) : "unreadable");
+        }
+        return;
+    }
+    cJSON *overrides = cJSON_ParseWithOpts(text, NULL, true);
+    free(text);
+    if (!cJSON_IsObject(overrides)) {
+        fprintf(stderr, "[theme] overrides in %s not used: not a JSON object\n", path);
+        cJSON_Delete(overrides);
+        return;
+    }
+    if (!cJSON_IsObject(*root)) {
+        cJSON_Delete(*root);
+        *root = cJSON_CreateObject();
+    }
+    /* Onion reads the theme's hideIconTitle into both labels before the
+     * overrides; set hideLabels from it so an override of one label keeps
+     * the other as the theme had it. */
+    const cJSON *legacy = cJSON_GetObjectItemCaseSensitive(*root, "hideIconTitle");
+    if (cJSON_GetObjectItemCaseSensitive(overrides, "hideLabels") &&
+        !cJSON_IsObject(cJSON_GetObjectItemCaseSensitive(*root, "hideLabels")) &&
+        cJSON_IsBool(legacy)) {
+        cJSON *labels = cJSON_CreateObject();
+        cJSON_AddBoolToObject(labels, "icons", cJSON_IsTrue(legacy));
+        cJSON_AddBoolToObject(labels, "hints", cJSON_IsTrue(legacy));
+        cJSON_DeleteItemFromObjectCaseSensitive(*root, "hideLabels");
+        if (labels && !cJSON_AddItemToObject(*root, "hideLabels", labels)) {
+            cJSON_Delete(labels);
+        }
+    }
+    for (cJSON *item = overrides->child; item; item = item->next) {
+        if (!item->string) {
+            continue;
+        }
+        cJSON *target = cJSON_GetObjectItemCaseSensitive(*root, item->string);
+        if (cJSON_IsObject(item) && cJSON_IsObject(target)) {
+            for (cJSON *field = item->child; field; field = field->next) {
+                cJSON *copy = field->string ? cJSON_Duplicate(field, true) : NULL;
+                if (copy) {
+                    cJSON_DeleteItemFromObjectCaseSensitive(target, field->string);
+                    if (!cJSON_AddItemToObject(target, field->string, copy)) {
+                        cJSON_Delete(copy);
+                    }
+                }
+            }
+        }
+        else {
+            cJSON *copy = cJSON_Duplicate(item, true);
+            if (copy) {
+                cJSON_DeleteItemFromObjectCaseSensitive(*root, item->string);
+                if (!cJSON_AddItemToObject(*root, item->string, copy)) {
+                    cJSON_Delete(copy);
+                }
+            }
+        }
+    }
+    cJSON_Delete(overrides);
+}
+
 bool mainui_theme_open(MainUITheme *t, const char *dir, const char *base,
                        const MainUIConfig *config)
 {
@@ -562,6 +639,7 @@ bool mainui_theme_open_sd(MainUITheme *t, const char *dir, const char *base, con
     }
     cJSON *root = text ? cJSON_ParseWithOpts(text, NULL, true) : NULL;
     free(text);
+    apply_overrides(t, &root);
     const cJSON *list = cJSON_GetObjectItemCaseSensitive(root, "list");
     const cJSON *title = cJSON_GetObjectItemCaseSensitive(root, "title");
     const cJSON *gamelist = cJSON_GetObjectItemCaseSensitive(root, "gamelist");

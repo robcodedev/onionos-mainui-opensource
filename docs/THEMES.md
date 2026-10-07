@@ -2,7 +2,7 @@
 
 Open MainUI works with themes that provide only the normal stock assets. This page lists the optional settings and assets it adds, and a few places where the behaviour is worth knowing when designing a theme. Most of it matches the [patched MainUI](https://github.com/robcodedev/onionos-mainui-patcher) theme-author guide, so a theme made for one works on the other.
 
-Only the active theme's `config.json` is read. If the active theme has no `config.json`, the stock theme's configuration is used as a whole; fields are not merged. Files in Onion's profile override folder (`Saves/CurrentProfile/theme/skin/`) take precedence over the theme's own `skin/` files.
+The active theme's `config.json` is read. If the active theme has no `config.json`, the stock theme's configuration is used as a whole; fields are not merged. Onion's theme overrides from Tweaks (Appearance > Theme overrides), saved in `Saves/CurrentProfile/theme/config.json`, are then applied over it field by field, as Onion does: each field in an object of the overrides (for example `batteryPercentage.size` or `hideLabels.hints`) replaces the theme's, and the object's other fields stay as the theme set them. A missing override file changes nothing; one that cannot be read or is not a JSON object is logged and ignored. Files in Onion's profile override folder (`Saves/CurrentProfile/theme/skin/`) take precedence over the theme's own `skin/` files.
 
 ## Optional settings
 
