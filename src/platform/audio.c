@@ -10,6 +10,7 @@
 static struct {
     void *module, *music, *change;
     bool opened, paused;
+    bool music_failed; /* bgm.mp3 loaded but did not start playing */
     void (*pause_music)(void), (*resume_music)(void);
     void (*pause_channels)(int), (*resume_channels)(int);
     int (*open)(int, Uint16, int, int);
@@ -76,6 +77,14 @@ void mainui_audio_close(void)
     memset(&audio, 0, sizeof audio);
 }
 
+static void start_music(void)
+{
+    audio.music_failed = audio.play_music(audio.music, -1) != 0;
+    if (audio.music_failed) {
+        fprintf(stderr, "[audio] background music did not start: %s\n", SDL_GetError());
+    }
+}
+
 void mainui_audio_volume(int volume)
 {
     if (volume < 0) {
@@ -91,6 +100,11 @@ void mainui_audio_volume(int volume)
     int mixer_volume = volume * 128 / 20;
     audio.volume_music(mixer_volume);
     audio.volume_channel(-1, mixer_volume);
+    /* Music that failed to start is tried again when Menu sound is raised
+     * above 0; otherwise only the mixer volume would change. */
+    if (audio.music_failed && volume > 0 && !audio.paused) {
+        start_music();
+    }
 }
 
 /* Report the failing step with its error before cleanup can overwrite it. */
@@ -141,17 +155,18 @@ bool mainui_audio_open(const char *theme, const char *fallback, int volume)
         return false;
     }
     audio.opened = true;
+    /* Only the theme's own music, as in stock: Onion's "Mute background
+     * music" renames the theme's bgm.mp3 to bgm_muted.mp3 before MainUI
+     * starts (mute_theme_bgm in runtime.sh), so the fallback theme's music
+     * must not play in its place. change.wav still falls back. */
     audio.music = load_asset(theme, "bgm.mp3", true);
-    if (!audio.music) {
-        audio.music = load_asset(fallback, "bgm.mp3", true);
-    }
     audio.change = load_asset(theme, "change.wav", false);
     if (!audio.change) {
         audio.change = load_asset(fallback, "change.wav", false);
     }
     mainui_audio_volume(volume);
     if (audio.music) {
-        audio.play_music(audio.music, -1);
+        start_music();
     }
     return true;
 }

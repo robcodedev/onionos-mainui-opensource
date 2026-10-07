@@ -18,6 +18,7 @@ The first line of each start names the build: `[startup] Open MainUI <version>, 
 * `[message]`: every message shown on screen, as it appears.
 * `[cache]`: each ROM list cache built (from `miyoogamelist.xml` or the ROM files, with its row count and time) or removed, and why: the cache was missing, it was damaged, or Refresh roms. A failed build gives its error.
 * `[scan]`: a console listed by scanning its folder because its cache could not be built or read.
+* `[audio]`: the theme's background music could not start playing, with SDL_mixer's reason. It is tried again when Menu sound is raised above 0.
 * `[job]`: a background read, search, refresh or repair that failed, with the console's `config.json`.
 * `[menu]`: an L1 press from keymon ignored after a Menu press or release, at most 20 lines a session. If holding Menu still moves the selection and no such line appears, MainUI did not see the Menu button.
 * `[return]` and `[restore]`: why the screen left for a game or app could not be shown again on return.
