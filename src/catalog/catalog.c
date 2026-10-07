@@ -331,8 +331,9 @@ static bool visit(MainUICatalogPage *page, const char *sd, const char *name, boo
             return false;
         }
         const char *rompath = string(json, "rompath", "");
-        /* Expert also contains standalone launchers without a ROM-list config. */
-        bool direct = mode == 2 || (mode == 3 && (!*rompath || !*string(json, "extlist", "")));
+        /* Expert also contains standalone launchers: those without a rompath.
+         * An empty extlist is a ROM list of every file, as in Games. */
+        bool direct = mode == 2 || (mode == 3 && !*rompath);
         const cJSON *hidden = cJSON_GetObjectItemCaseSensitive(json, "hide");
         if (!cJSON_IsObject(json) || !(direct ? *string(json, "launch", "") : *rompath) ||
             cJSON_IsTrue(hidden) || (cJSON_IsNumber(hidden) && hidden->valueint)) {
