@@ -26,6 +26,10 @@ typedef struct {
     bool loading_background_loaded;
     SDL_Surface *apps_selection;
     bool apps_selection_loaded;
+    /* The Apps list's decoded icons for its visible rows, by icon path, so a
+     * redraw does not decode them again (mainui_draw_apps()). */
+    SDL_Surface *app_icons[4];
+    char *app_icon_paths[4];
 
     struct {
         TTF_Font *font;

@@ -848,6 +848,10 @@ void mainui_theme_close(MainUITheme *t)
     SDL_FreeSurface(t->popup_selection);
     SDL_FreeSurface(t->loading_background);
     SDL_FreeSurface(t->apps_selection);
+    for (int i = 0; i < 4; ++i) {
+        SDL_FreeSurface(t->app_icons[i]);
+        free(t->app_icon_paths[i]);
+    }
     for (int i = 0; i < 32; ++i) {
         SDL_FreeSurface(t->text_cache[i].surface);
     }

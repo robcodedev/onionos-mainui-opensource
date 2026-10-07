@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "support.h"
+#include "ui/panels.h"
 #include "ui/theme.h"
 #ifdef NDEBUG
 #undef NDEBUG
@@ -233,6 +234,54 @@ int main(int argc, char **argv)
     assert(TTF_FontHeight(theme.battery_font) == theme_battery && theme.hide_icons);
     mainui_theme_close(&theme);
     assert(remove(overrides) == 0);
+    /* The Apps list keeps the decoded icons of its visible rows: a redraw
+     * reuses them, and an icon is freed once its row is no longer shown. */
+    assert(mainui_theme_open_sd(&theme, active, builtin, root, &config));
+    char app_icons[3][1024];
+    MainUIEntry apps_entries[3];
+    for (int i = 0; i < 3; i++) {
+        char name[32];
+        snprintf(name, sizeof name, "app-%d.png", i);
+        picture(active, name, 60, 60, (Uint8)(10 + i));
+        TEST_PATH(app_icons[i], "%s/%s", active, name);
+        apps_entries[i] = (MainUIEntry){.label = "App", .icon = app_icons[i]};
+    }
+    MainUICatalog *apps = calloc(1, sizeof *apps);
+    assert(apps);
+    apps->pages[0].entries = apps_entries;
+    apps->pages[0].count = apps->pages[0].loaded = 3;
+    SDL_Surface *screen =
+        SDL_CreateRGBSurface(SDL_SWSURFACE, 640, 480, 32, 0xff0000, 0xff00, 0xff, 0);
+    assert(screen);
+    MainUIViewport apps_view = {.total = 3, .selected = 0, .start = 0, .end = 1};
+    mainui_draw_apps(screen, &theme, apps, &apps_view);
+    SDL_Surface *kept = NULL;
+    for (int i = 0; i < 4; i++) {
+        if (theme.app_icon_paths[i] && !strcmp(theme.app_icon_paths[i], app_icons[0])) {
+            kept = theme.app_icons[i];
+        }
+    }
+    assert(kept && kept->w == 60);
+    kept->refcount++;
+    mainui_draw_apps(screen, &theme, apps, &apps_view);
+    int holders = 0;
+    for (int i = 0; i < 4; i++) {
+        holders += theme.app_icons[i] == kept;
+    }
+    assert(holders == 1 && kept->refcount == 2);
+    apps_view = (MainUIViewport){.total = 3, .selected = 2, .start = 1, .end = 2};
+    mainui_draw_apps(screen, &theme, apps, &apps_view);
+    assert(kept->refcount == 1);
+    SDL_FreeSurface(kept);
+    int shown = 0;
+    for (int i = 0; i < 4; i++) {
+        assert(!theme.app_icon_paths[i] || strcmp(theme.app_icon_paths[i], app_icons[0]));
+        shown += theme.app_icons[i] != NULL;
+    }
+    assert(shown == 2);
+    mainui_theme_close(&theme);
+    SDL_FreeSurface(screen);
+    free(apps);
     TTF_Quit();
     SDL_Quit();
     puts("Artwork reuse, cached misses, theme invalidation, popup fallback and theme overrides "
