@@ -8,6 +8,7 @@
 #include "platform/device_request.h"
 #include "platform/input.h"
 #include "platform/launch.h"
+#include "platform/menu_button.h"
 #include "platform/system_config.h"
 #include "platform/timing.h"
 #include <stdio.h>
@@ -1220,8 +1221,78 @@ static void dispatch_key(MainUIApp *ui, SDL_Event *event)
     mainui_screen_list_key(ui, key);
 }
 
+/* A release of Menu opens the context menu, as Select does and as stock does
+ * for keymon's "Context menu" long press. It never closes the menu: after a
+ * long press the physical release follows the one keymon sent. */
+static void menu_release(MainUIApp *ui)
+{
+    if (ui->select_menu_pending && (Sint32)(SDL_GetTicks() - ui->select_menu_until) < 0) {
+        ui->select_menu_pending = false;
+        return;
+    }
+    ui->select_menu_pending = false;
+    if (ui->context_open || ui->catalog_job.thread || ui->name_input.open) {
+        return;
+    }
+    SDL_Event select;
+    memset(&select, 0, sizeof select);
+    select.type = SDL_KEYDOWN;
+    select.key.state = SDL_PRESSED;
+    select.key.keysym.sym = SDLK_RCTRL;
+    bool held = ui->held[SDLK_RCTRL];
+    dispatch_key(ui, &select);
+    ui->held[SDLK_RCTRL] = held;
+}
+
+/* Keymon "quiets" MainUI with an L1 press and an L1 release after its
+ * long-press Menu release, and again for every repeat of Menu while Menu
+ * stays down and once more when it is released; in a list each L1 starts a
+ * letter jump. As each key is sent with an SD card sync, they can come late
+ * and L1 can stay down long enough to repeat. So every L1 pressed within 3 s
+ * of a Menu event the reader saw, with no other key between, is keymon's: it
+ * is ignored with its repeats and its release, as stock does. Menu itself
+ * (F1) does not count as another key. A real L1 caught by this would act on
+ * the context menu, where L1 does nothing anyway. */
+static bool quiet_l1(MainUIApp *ui, const SDL_Event *event)
+{
+    if (event->type != SDL_KEYDOWN && event->type != SDL_KEYUP) {
+        return false;
+    }
+    SDLKey key = event->key.keysym.sym;
+    int events = mainui_menu_button_events();
+    if (events != ui->menu_events_seen) {
+        ui->menu_events_seen = events;
+        ui->quiet_l1_armed = true;
+    }
+    if (key == SDLK_PAGEUP && ui->quiet_l1_held) {
+        ui->quiet_l1_held = event->type == SDL_KEYDOWN;
+        return true;
+    }
+    if (event->type != SDL_KEYDOWN || key == SDLK_F1) {
+        return false;
+    }
+    if (key == SDLK_PAGEUP && ui->quiet_l1_armed && mainui_menu_button_recent(3000)) {
+        ui->quiet_l1_held = true;
+        static int logged;
+        if (logged < 20) {
+            logged++;
+            fprintf(stderr, "[menu] ignored keymon's L1 after Menu\n");
+        }
+        return true;
+    }
+    ui->quiet_l1_armed = false;
+    return false;
+}
+
 bool mainui_dispatch_event(MainUIApp *ui, SDL_Event *event)
 {
+    if (event->type == SDL_USEREVENT && event->user.code == MAINUI_MENU_RELEASE_CODE) {
+        menu_release(ui);
+        return true;
+    }
+    if (quiet_l1(ui, event)) {
+        return true;
+    }
     /* Timer, decoder and key-up events must not replace the launch key time. */
     if (event->type == SDL_KEYDOWN) {
         mainui_mark(MAINUI_MARK_EVENT);
@@ -1242,6 +1313,15 @@ bool mainui_dispatch_event(MainUIApp *ui, SDL_Event *event)
         SDLKey released = mainui_input_key(event->key.keysym.sym);
         if (released >= 0 && released < SDLK_LAST) {
             ui->held[released] = false;
+        }
+        if (released == SDLK_RCTRL && ui->real_device) {
+            ui->select_menu_pending = true;
+            ui->select_menu_until = SDL_GetTicks() + 1500;
+        }
+        /* On the device Menu releases come from platform/menu_button.c,
+         * which also sees the lone release SDL drops. */
+        if (released == SDLK_F1 && !ui->real_device) {
+            menu_release(ui);
         }
         if (released == SDLK_RETURN) {
             ui->return_latched = false;

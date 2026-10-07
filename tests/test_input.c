@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "platform/input.h"
+#include "platform/menu_button.h"
 #include "ui/drawing.h"
 #ifdef NDEBUG
 #undef NDEBUG
@@ -8,6 +9,13 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef __linux__
+#include <fcntl.h>
+#include <linux/input.h>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 static void presentation_case(int depth, int width, int height, int mode)
 {
@@ -105,8 +113,51 @@ static void presentation(int depth)
     presentation_case(depth, 640, 480, 5);
 }
 
+#ifdef __linux__
+/* Keymon's long press of Menu is a lone release; the reader counts every Menu
+ * event and every Menu release, and nothing else, from a FIFO standing in for the input device. */
+static void menu_releases(void)
+{
+    char path[] = "/tmp/mainui-menu-XXXXXX";
+    assert(mkdtemp(path));
+    char fifo[64];
+    snprintf(fifo, sizeof fifo, "%s/event0", path);
+    assert(mkfifo(fifo, 0600) == 0);
+    assert(mainui_menu_button_open(fifo));
+    int writer = open(fifo, O_WRONLY);
+    assert(writer >= 0);
+    struct input_event events[] = {
+        {.type = EV_KEY, .code = KEY_ESC, .value = 0}, /* the lone release */
+        {.type = EV_SYN},
+        {.type = EV_KEY, .code = KEY_ESC, .value = 1},
+        {.type = EV_KEY, .code = KEY_ESC, .value = 2},
+        {.type = EV_KEY, .code = KEY_SPACE, .value = 0},
+        {.type = EV_KEY, .code = KEY_ESC, .value = 0}, /* the physical release */
+    };
+    assert(write(writer, events, sizeof events) == (ssize_t)sizeof events);
+    for (int i = 0; i < 200 && mainui_menu_button_releases() < 2; i++) {
+        SDL_Delay(5);
+    }
+    SDL_Delay(20);
+    assert(mainui_menu_button_releases() == 2 && mainui_menu_button_events() == 4);
+    /* Keymon's L1 right after a Menu event is dropped; later ones are not. */
+    assert(mainui_menu_button_recent(500));
+    SDL_Delay(60);
+    assert(!mainui_menu_button_recent(50));
+    mainui_menu_button_close();
+    close(writer);
+    assert(unlink(fifo) == 0 && rmdir(path) == 0);
+    /* No device: nothing is read, and closing is still safe. */
+    assert(!mainui_menu_button_open("/nonexistent/event0"));
+    mainui_menu_button_close();
+}
+#endif
+
 int mainui_suite_input(void)
 {
+#ifdef __linux__
+    menu_releases();
+#endif
     presentation(16);
     presentation(24);
     presentation(32);

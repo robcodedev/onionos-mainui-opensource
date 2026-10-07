@@ -46,6 +46,14 @@ typedef struct {
     const char *input_script;
     const char *input_text;
     bool real_device;
+    /* Keymon answers a Select release in MainUI with a Menu press and
+     * release; that release must not open the context menu again. */
+    bool select_menu_pending;
+    Uint32 select_menu_until;
+    /* Keymon's L1 after its Menu release: the Menu releases already matched
+     * or passed over, and whether that L1 is down now. */
+    int menu_events_seen;
+    bool quiet_l1_armed, quiet_l1_held;
     bool battery_override;
     bool start_systems;
     bool refresh_caches;

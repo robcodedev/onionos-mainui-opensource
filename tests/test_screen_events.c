@@ -2,6 +2,7 @@
 #include "app/loop.h"
 #include "app/render.h"
 #include "app/screen_events.h"
+#include "platform/menu_button.h"
 #ifdef NDEBUG
 #undef NDEBUG
 #endif
@@ -467,6 +468,38 @@ static void settings_windows(MainUIApp *ui)
     reset(ui);
 }
 
+/* Keymon's L1s after its Menu release, after each repeat of Menu and after
+ * the physical release are ignored with their repeats and releases, however
+ * late within 3 s; an L1 after another key is not. A key that is not ignored
+ * is recorded as held. */
+static void keymon_quiet_l1(MainUIApp *ui)
+{
+    reset(ui);
+    mainui_menu_button_record(0);           /* keymon's release */
+    key_event(ui, SDL_KEYDOWN, SDLK_F1, 0); /* Menu's own keys do not disarm */
+    key_event(ui, SDL_KEYUP, SDLK_F1, 0);
+    SDL_Delay(600);
+    key_event(ui, SDL_KEYDOWN, SDLK_PAGEUP, 0);
+    assert(!ui->held[SDLK_PAGEUP] && ui->quiet_l1_held);
+    key_event(ui, SDL_KEYDOWN, SDLK_PAGEUP, 0); /* a repeat */
+    assert(!ui->held[SDLK_PAGEUP]);
+    key_event(ui, SDL_KEYUP, SDLK_PAGEUP, 0);
+    assert(!ui->quiet_l1_held);
+    for (int value = 2; value >= 0; value -= 2) { /* a repeat of Menu, its release */
+        mainui_menu_button_record(value);
+        key_event(ui, SDL_KEYDOWN, SDLK_PAGEUP, 0);
+        assert(!ui->held[SDLK_PAGEUP] && ui->quiet_l1_held);
+        key_event(ui, SDL_KEYUP, SDLK_PAGEUP, 0);
+        assert(!ui->quiet_l1_held);
+    }
+    /* Another key after them: the next L1 is the user's. */
+    key_event(ui, SDL_KEYDOWN, SDLK_DOWN, 0);
+    key_event(ui, SDL_KEYUP, SDLK_DOWN, 0);
+    key_event(ui, SDL_KEYDOWN, SDLK_PAGEUP, 0);
+    assert(ui->held[SDLK_PAGEUP] && !ui->quiet_l1_held);
+    key_event(ui, SDL_KEYUP, SDLK_PAGEUP, 0);
+}
+
 int mainui_suite_screen_events(void)
 {
     MainUIApp *ui = calloc(1, sizeof *ui);
@@ -482,6 +515,7 @@ int mainui_suite_screen_events(void)
     held_confirmation(ui);
     message_over_details(ui);
     releases_and_focus(ui);
+    keymon_quiet_l1(ui);
     free(ui);
     return 0;
 }
