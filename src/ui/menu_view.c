@@ -3,6 +3,7 @@
 #include "platform/timing.h"
 #include "ui/panels.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static void blit(SDL_Surface *screen, SDL_Surface *image, int x, int y)
@@ -44,6 +45,8 @@ static void clear_consoles(MainUIMenuView *view)
         if (normal) {
             SDL_FreeSurface(normal);
         }
+        free(view->pending_selected[i]);
+        view->pending_selected[i] = NULL;
         for (int state = 0; state < 2; state++) {
             if (view->console_labels[i][state]) {
                 SDL_FreeSurface(view->console_labels[i][state]);
@@ -307,6 +310,8 @@ void mainui_menu_view_page(MainUIMenuView *view, MainUICatalog *catalog,
     /* Expert draws the centered 192x72 of an icon. */
     int width = expert ? 192 : 0, height = expert ? 72 : 0;
     clear_consoles(view);
+    view->crop_width = width;
+    view->crop_height = height;
     for (int i = 0; i < capacity && position->start + i < position->total; i++) {
         MainUIEntry *entry = mainui_catalog_entry(catalog, position->start + i);
         if (!entry) {
@@ -317,6 +322,12 @@ void mainui_menu_view_page(MainUIMenuView *view, MainUICatalog *catalog,
         /* One file for both states is decoded once. */
         bool same =
             !entry->icon_selected || (entry->icon && !strcmp(entry->icon_selected, entry->icon));
+        /* Until it is decoded, a selected icon left for later shows as the
+         * normal one; the shared surface is freed once, as for one file. */
+        if (!same && view->defer_selected && position->start + i != position->selected) {
+            view->pending_selected[i] = strdup(entry->icon_selected);
+            same = view->pending_selected[i] != NULL;
+        }
         view->console_icons[i][1] =
             same ? view->console_icons[i][0]
                  : mainui_menu_view_icon(theme, entry->icon_selected, mainui_menu_view_bytes(view),
@@ -334,6 +345,37 @@ void mainui_menu_view_page(MainUIMenuView *view, MainUICatalog *catalog,
         }
     }
     view->cached_start = position->start;
+}
+
+bool mainui_menu_view_load_pending(MainUIMenuView *view, const MainUIViewport *position,
+                                   bool *shown)
+{
+    *shown = false;
+    if (view->cached_start < 0 || view->cached_start != position->start) {
+        return false;
+    }
+    int slot = position->selected - position->start;
+    if (slot < 0 || slot >= 9 || !view->pending_selected[slot]) {
+        slot = -1;
+        for (int i = 0; i < 9 && slot < 0; i++) {
+            if (view->pending_selected[i]) {
+                slot = i;
+            }
+        }
+    }
+    if (slot < 0) {
+        return false;
+    }
+    char *path = view->pending_selected[slot];
+    view->pending_selected[slot] = NULL;
+    SDL_Surface *icon = mainui_menu_view_icon(view->theme, path, mainui_menu_view_bytes(view),
+                                              view->crop_width, view->crop_height);
+    free(path);
+    if (icon) {
+        view->console_icons[slot][1] = icon;
+        *shown = position->start + slot == position->selected;
+    }
+    return true;
 }
 
 void mainui_menu_draw_systems(MainUIMenuView *view, SDL_Surface *screen, MainUICatalog *catalog,

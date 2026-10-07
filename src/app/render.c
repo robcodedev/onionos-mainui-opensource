@@ -250,6 +250,21 @@ static bool idle_unchanged(const MainUIApp *ui, Uint32 now, Uint32 repaint_ms)
            !strcmp(ui->presented_wifi_address, ui->theme.wifi_address);
 }
 
+bool mainui_load_deferred_icons(MainUIApp *ui)
+{
+    bool shown = false;
+    while (ui->systems_drawn && !ui->catalog_job.thread && ui->catalog && !ui->catalog->depth &&
+           !ui->library) {
+        SDL_Event waiting;
+        SDL_PumpEvents();
+        if (SDL_PeepEvents(&waiting, 1, SDL_PEEKEVENT, SDL_ALLEVENTS) > 0 ||
+            !mainui_menu_view_load_pending(&ui->menu_view, &ui->view, &shown) || shown) {
+            break;
+        }
+    }
+    return shown;
+}
+
 bool mainui_frame_current(const MainUIApp *ui, Uint32 now)
 {
     return idle_unchanged(ui, now, IDLE_REPAINT_MS) && !ui->presented_animating &&
@@ -480,6 +495,7 @@ static bool recover_page(MainUIApp *ui, const MainUILaunchSource *source)
 
 static bool compose_full_frame(MainUIApp *ui)
 {
+    ui->systems_drawn = false;
     if (ui->catalog_job.thread) {
         /* Retain the previous frame until the catalog result is ready. */
     }
@@ -504,6 +520,7 @@ static bool compose_full_frame(MainUIApp *ui)
     }
     else if (ui->catalog && !ui->catalog->depth && !ui->library) {
         mainui_menu_draw_systems(&ui->menu_view, ui->screen, ui->catalog, &ui->view);
+        ui->systems_drawn = true;
     }
     else {
         /* Keep rendered row labels until the visible window changes. Marquee

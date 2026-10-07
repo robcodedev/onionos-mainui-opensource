@@ -25,6 +25,10 @@ bool mainui_draw_frame(MainUIApp *ui);
 /* True when an idle tick would repaint exactly the presented frame, so the
  * draw, rotation and flip can be skipped. Conservative: see render.c. */
 bool mainui_frame_current(const MainUIApp *ui, Uint32 now);
+/* After a frame of the console grid, while no input waits, decode the
+ * selected icons the page left for later, one at a time. True when the
+ * selected console's icon changed and the frame must be drawn again. */
+bool mainui_load_deferred_icons(MainUIApp *ui);
 /* True when only the selected row's marquee moved since the presented frame,
  * so a frame can recompose just that row. */
 bool mainui_frame_marquee_only(const MainUIApp *ui, Uint32 now);

@@ -125,6 +125,8 @@ typedef struct {
     bool marquee_paced;
     Uint32 marquee_due, marquee_origin, marquee_steps;
     bool presented_animating;
+    /* The last full frame drew the Games or Expert console grid. */
+    bool systems_drawn;
     Uint32 active_at, presented_at;
     int presented_battery, presented_wifi_signal;
     bool presented_wifi_online;

@@ -47,6 +47,10 @@ static int run(int argc, char **argv, MainUIApp *ui)
                 continue;
             }
         }
+        if (mainui_load_deferred_icons(ui)) {
+            ui->idle_tick = false; /* draw the selected console's icon */
+            continue;
+        }
         SDL_Event event;
         if (!mainui_wait_event(ui, &event)) {
             break;

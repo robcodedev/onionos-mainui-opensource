@@ -187,6 +187,42 @@ int main(int argc, char **argv)
     for (int i = 0; i < 9; ++i) {
         assert(view.console_icons[i][0]->w == 192 && view.console_icons[i][0]->h == 72);
     }
+    /* Deferred, a page decodes every normal icon and only the selected
+     * console's selected icon; the others show the normal one until they are
+     * decoded, the selected console's first, cropped as the page's are. */
+    view.defer_selected = true;
+    for (int i = 0; i < 3; ++i) {
+        consoles[i].icon_selected = mid;
+    }
+    page.selected = 1;
+    view.cached_start = -1;
+    mainui_menu_view_page(&view, grid, &page);
+    for (int i = 0; i < 9; ++i) {
+        assert(view.console_icons[i][0] &&
+               (i == 1) == (view.console_icons[i][1] != view.console_icons[i][0]));
+        assert((i == 0 || i == 2) == (view.pending_selected[i] != NULL));
+    }
+    assert(view.console_icons[1][1]->w == 192 && view.console_icons[1][1]->h == 72);
+    bool shown;
+    page.selected = 2;
+    assert(mainui_menu_view_load_pending(&view, &page, &shown) && shown);
+    assert(!view.pending_selected[2] && view.console_icons[2][1] != view.console_icons[2][0]);
+    assert(view.console_icons[2][1]->w == 192 && view.console_icons[2][1]->h == 72);
+    assert(mainui_menu_view_load_pending(&view, &page, &shown) && !shown);
+    assert(!view.pending_selected[0] && view.console_icons[0][1] != view.console_icons[0][0]);
+    assert(!mainui_menu_view_load_pending(&view, &page, &shown) && !shown);
+    /* Another page, or none loaded: nothing is decoded for the old one. */
+    view.cached_start = -1;
+    mainui_menu_view_page(&view, grid, &page);
+    assert(view.pending_selected[0] && view.pending_selected[1] && !view.pending_selected[2]);
+    MainUIViewport other_page = page;
+    other_page.start = 9;
+    assert(!mainui_menu_view_load_pending(&view, &other_page, &shown));
+    view.defer_selected = false;
+    for (int i = 0; i < 3; ++i) {
+        consoles[i].icon_selected = NULL;
+    }
+    page.selected = 0;
     /* With the budget taken (here by home icons), icons are left out. */
     for (int i = 0; i < 2; ++i) {
         view.home_icons[0][i] =

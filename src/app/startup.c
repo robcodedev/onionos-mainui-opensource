@@ -427,6 +427,8 @@ void mainui_restore_session(MainUIApp *ui)
     }
     ui->theme.battery_percent = ui->battery_percent;
     mainui_menu_view_open(&ui->menu_view, &ui->theme);
+    /* Snapshots and scripted input draw at once, with every icon in place. */
+    ui->menu_view.defer_selected = !ui->snapshot && !ui->input_script;
     if (ui->handoff_dir && !ui->system_name && !ui->start_systems) {
         cJSON *returned = mainui_launch_take_return(ui->handoff_dir);
         /* A restored catalog is read fresh from the SD card, so it already has
