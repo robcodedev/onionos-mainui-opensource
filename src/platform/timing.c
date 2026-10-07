@@ -17,7 +17,7 @@ static bool valid[MAINUI_MARK_COUNT], enabled, reported;
 static const char *const names[] = {"frames",      "roms",         "cache",          "cache-hits",
                                     "cache-scans", "scan-entries", "cache-build-ms", "scan-ms",
                                     "draw-ms",     "gap-under35",  "gap-40",         "gap-50-60",
-                                    "gap-over65"};
+                                    "gap-over65",  "discover-ms",  "icon-ms"};
 static atomic_long counters[sizeof names / sizeof *names];
 static char exchange[4096], boot_id[64];
 static int64_t away_ms = -1;

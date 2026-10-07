@@ -529,7 +529,7 @@ static bool scan(MainUICatalogPage *page, const char *sd, int mode, bool sensiti
     return scan_result(page, sd, mode, sensitive, cancel, &result);
 }
 
-bool mainui_catalog_open(MainUICatalog *catalog, const char *sd, bool sensitive)
+static bool open_systems(MainUICatalog *catalog, const char *sd, bool sensitive)
 {
     catalog->case_sensitive = sensitive;
     if (!mainui_catalog_path(catalog->sd, sd, sd, ".")) {
@@ -585,8 +585,16 @@ bool mainui_catalog_open(MainUICatalog *catalog, const char *sd, bool sensitive)
     return true;
 }
 
-static bool optional_catalog(MainUICatalog *catalog, const char *sd, bool sensitive,
-                             const char *directory, const char *title, int mode)
+bool mainui_catalog_open(MainUICatalog *catalog, const char *sd, bool sensitive)
+{
+    struct timespec start = mainui_timing_start();
+    bool ok = open_systems(catalog, sd, sensitive);
+    mainui_timing_finish("discover-ms", start);
+    return ok;
+}
+
+static bool optional_unmeasured(MainUICatalog *catalog, const char *sd, bool sensitive,
+                                const char *directory, const char *title, int mode)
 {
     catalog->case_sensitive = sensitive;
     if (!mainui_catalog_path(catalog->sd, sd, sd, ".")) {
@@ -611,6 +619,16 @@ static bool optional_catalog(MainUICatalog *catalog, const char *sd, bool sensit
         return false;
     }
     return true;
+}
+
+/* Apps or Expert: list the folder and read each config, timed together. */
+static bool optional_catalog(MainUICatalog *catalog, const char *sd, bool sensitive,
+                             const char *directory, const char *title, int mode)
+{
+    struct timespec start = mainui_timing_start();
+    bool ok = optional_unmeasured(catalog, sd, sensitive, directory, title, mode);
+    mainui_timing_finish("discover-ms", start);
+    return ok;
 }
 
 bool mainui_catalog_apps(MainUICatalog *catalog, const char *sd, bool sensitive)

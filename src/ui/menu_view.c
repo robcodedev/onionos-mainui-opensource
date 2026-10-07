@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "ui/menu_view.h"
+#include "platform/timing.h"
 #include "ui/panels.h"
 #include <stdio.h>
 #include <string.h>
@@ -185,7 +186,10 @@ SDL_Surface *mainui_menu_view_icon(MainUITheme *theme, const char *path, size_t 
             return NULL;
         }
     }
-    return keep_icon(retained, mainui_theme_console_icon(theme, path), width, height, path);
+    struct timespec start = mainui_timing_start();
+    SDL_Surface *icon = mainui_theme_console_icon(theme, path);
+    mainui_timing_finish("icon-ms", start);
+    return keep_icon(retained, icon, width, height, path);
 }
 
 void mainui_menu_view_open(MainUIMenuView *view, MainUITheme *theme)

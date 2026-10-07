@@ -22,6 +22,8 @@ Marks use CLOCK_MONOTONIC and integer timespec arithmetic. Only the UI thread re
 - scan-entries: entries materialized during cache construction and successful scan fallback, accumulated across the session (including folders).
 - cache-build-ms: cumulative time inside the locked cache-build operation, including failed/cancelled attempts and existing-cache checks; excludes lock acquisition.
 - scan-ms: cumulative directory enumeration and sorting time, including discovery, fallback and scans nested inside cache builds. These totals overlap and must not be added together. Each operation is rounded down to milliseconds, so very short operations can report zero.
+- discover-ms: cumulative time reading the console, app and Expert folders with their config.json files: at startup for Games, and each time Games, Expert or Apps is opened. A slow first entry after boot with a large discover-ms points to slow card reads.
+- icon-ms: cumulative time loading and decoding console and app icons for the Games and Expert grids and the Apps list (not home icons or theme images). A slow first entry with a large icon-ms points to large icons or slow icon reads.
 - -1 means unavailable or an unreached boundary, not zero elapsed time.
 
 Snapshot-only runs do not flip a frame or reach the launch handoff mark, so those boundaries remain unavailable. Reports also cover early setup failures where possible. Ordinary exits omit the launch line.
