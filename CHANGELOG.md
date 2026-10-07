@@ -1,5 +1,54 @@
 # Changelog
 
+## 1.0.5 - 2026-10-07
+
+### Buttons
+
+* Y on a game in a ROM list, Favorites, Recents or Search results launches it as A does, as stock does, so Onion's default keymap opens Game List Options for it ([#14](https://github.com/robcodedev/onionos-mainui-opensource/issues/14)). Y on a folder does nothing. Thanks to VEUKS for the report, via [@Amiga500](https://github.com/Amiga500).
+* Menu opens the context menu again, as Select does. Onion's default "Context menu" long press (Tweaks > Button shortcuts > MainUI: Menu button) makes keymon send MainUI only a release of Menu, which stock opens the menu on; Open MainUI ignored Menu, so the device vibrated and nothing happened. That release is now read from the input device, since SDL drops a release of a key it never saw pressed. The L1 presses keymon sends after it, and again for as long as Menu is held, are ignored, so holding Menu in a list no longer moves the selection. Thanks to VEUKS for the report, via [@Amiga500](https://github.com/Amiga500).
+
+### Game List Options
+
+* Backing out of Game List Options leaves Recents as it was. It removes the first game in Recents, taken to be the one just launched, so Y adds the game there without moving the others; if Recents cannot be written, Y shows Launch unavailable instead.
+* A Y press MainUI ignores, on a folder for example, no longer makes the next A launch open Game List Options.
+* Game List Options knows which list a game came from and shows that list's options, such as Filter list and Refresh list: `state.json` is written one field per line, as stock writes it.
+* A game added to Favorites or launched from Onion's Search console, or from a search in a ROM list, keeps its ROM path as the list spells it (`/mnt/SDCARD/Emu/GBC/../../Roms/GBC/...`) instead of `/mnt/SDCARD/Roms/GBC/...`. Game List Options recognizes a game only by the first, so it showed no game options, such as the core, for these Favorites and Recents. Favorites added before keep their old path; remove and add them again.
+
+### Themes and screens
+
+* Theme overrides made in Tweaks (Appearance > Theme overrides), such as the battery percentage size or hidden labels, are applied again: `Saves/CurrentProfile/theme/config.json` is merged over the theme's `config.json` field by field, as Onion does ([#15](https://github.com/robcodedev/onionos-mainui-opensource/issues/15)). See [docs/THEMES.md](docs/THEMES.md). Thanks to VEUKS for the report, via [@Amiga500](https://github.com/Amiga500).
+* The Apps list shows its row counter, as stock does (10/15 on row 10 of 15).
+* The Apps list's rows start at the top of the list area instead of 2 px lower, so the last row is no longer cut off at the bottom. Thanks to ZZZ for the report.
+* Footer hints, the page counter and dialog action hints use the theme's `hint.font`, or when it names none the default font (Exo 2 Bold Italic), as in stock. Before, they used the title font.
+* The screen behind the context menu is darkened, as in stock. Thanks to ZZZ for the report.
+* Expert marks the selected console with the theme's `bg-ra-list-item.png`, as stock does, instead of drawing the Games tiles behind every console. Thanks to [@Zazzago](https://github.com/Zazzago) for the report.
+
+### Lists
+
+* A `Manuals` folder in a console's ROM folder, in any case, is no longer listed as a ROM folder, the same as `Imgs`. Run Refresh roms for a console whose cache was built with it. Thanks to [@QuackWalks](https://github.com/QuackWalks) for the report.
+* A folder in a console's ROM folder is listed only when it holds a ROM of that console somewhere below it. Empty folders and the data folders of ScummVM games, ports and other extracted games (`AUDIO`, `DRIVERS`, `MUSIC`, `SPEECH` and the like) no longer fill the list; a ScummVM list now shows just its games. This applies to lists built from the ROM files, not from `miyoogamelist.xml` or the scan MainUI falls back to when a cache cannot be built. Run Refresh roms for a console whose cache lists such folders. Thanks to [@Zazzago](https://github.com/Zazzago) for the report.
+* A console whose `config.json` has an empty or no `extlist` lists all its files again, instead of none. Only the game lists, ROM list caches and other files MainUI and Onion keep beside the ROMs are left out. Run Refresh roms for such a console to list its games. Thanks to [@Ziko577](https://github.com/Ziko577) for the report.
+* An Expert config with a `rompath` and an empty `extlist`, such as fMSX's, opens its ROM list of all files, as an empty `extlist` does in Games. 1.0.4 started the emulator without a game; only a config without a `rompath` launches directly. Thanks to [@Zazzago](https://github.com/Zazzago) for the report.
+
+### Sound
+
+* Onion's Mute background music (Tweaks) now silences MainUI. Onion mutes the music by renaming the theme's `bgm.mp3` before MainUI starts; Open MainUI then played the default theme's music in its place. A theme without `bgm.mp3` now plays no music, as in stock. The change sound still falls back to the default theme's.
+* Background music that fails to start is logged and tried again when Menu sound is raised above 0. Before, it stayed silent until MainUI restarted.
+
+### Speed and memory
+
+* The Apps list decodes the icons of its visible rows once and keeps them, instead of decoding them again on every redraw.
+* An icon left out for the 24 MiB icon budget is remembered with its size, so it is not decoded again on every page while it still cannot fit.
+* Games and Expert appear sooner: a page of consoles decodes its normal icons and only the selected console's selected icon before it is shown, instead of both icons of every console on the page. The other selected icons follow while MainUI waits for input; a console selected before its icon is ready shows its normal icon for a moment.
+
+### Logging
+
+* The `[timing]` line has two new counters: `discover-ms`, the time spent reading the console and app folders with their configs, and `icon-ms`, the time spent loading and decoding console and app icons. They show whether a slow first entry into Games or Apps is reading the card or decoding icons. See [docs/TIMING.md](docs/TIMING.md).
+
+### Documentation and tests
+
+* The overlong gamelist path test from 1.0.4 now actually fails without the fix it covers.
+
 ## 1.0.4 - 2026-10-04
 
 ### Game lists
