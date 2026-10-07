@@ -29,4 +29,11 @@ void mainui_menu_view_page(MainUIMenuView *view, MainUICatalog *catalog,
                            const MainUIViewport *position);
 /* Bytes held by home and console icons; capped at 24 MiB. */
 size_t mainui_menu_view_bytes(const MainUIMenuView *view);
+/* Decode the icon at path (mainui_theme_console_icon()), cropped to width x
+ * height when they are set, or NULL when it would take its holder past the
+ * 24 MiB icon budget with `retained` bytes already held. An icon dropped for
+ * the budget is remembered with its size for the session, so it is not
+ * decoded again while it still cannot fit. UI thread only. */
+SDL_Surface *mainui_menu_view_icon(MainUITheme *theme, const char *path, size_t retained, int width,
+                                   int height);
 #endif

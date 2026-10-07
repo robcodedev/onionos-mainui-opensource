@@ -31,6 +31,7 @@ def main():
         root = Path(directory)
         png(root / "theme-big.png", 1000, 1000)
         png(root / "icon-big.png", 2000, 2000)
+        png(root / "icon-drop.png", 2000, 2000)
         png(root / "icon-mid.png", 1200, 1200)
         png(root / "icon-other.png", 1200, 1200)
         png(root / "small.png", 1, 1)
