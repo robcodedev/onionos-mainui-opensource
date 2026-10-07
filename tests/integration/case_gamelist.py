@@ -147,7 +147,10 @@ for data in (b'', b'   ', b'<gameList>', b'<gameList><game><path>broken', b'not 
 # so a cut would import a different file. The game is skipped and the rest of
 # the list still imports. An image that long is dropped, not cut.
 def overlong(target, tail):
-    head = "/mnt/SDCARD/Roms/Jeux"
+    # The host ROM path is used as is: /mnt/SDCARD/ would be remapped to the
+    # longer host root here, making the cut path too long to resolve at all,
+    # so the check would pass even without the fix.
+    head = str(ROM)
     head += "/" * (4092 - len(head.encode()) - len(target.encode())) + target
     assert len(head.encode()) == 4092
     return head + tail
