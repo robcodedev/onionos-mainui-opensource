@@ -47,6 +47,13 @@ static bool field(cJSON *record, const char *key, MainUICatalog *catalog, const 
     }
     size_t size = strlen(catalog->sd);
     if (!strncmp(resolved, catalog->sd, size) && resolved[size] == '/') {
+        /* A cache row's stock spelling on the card, such as
+         * /mnt/SDCARD/Emu/GBC/../../Roms/..., is kept as the ROM list keeps it:
+         * Favorites and Recents store it as is, and Onion's Game List Options
+         * recognizes a game by it. */
+        if (strcmp(key, "launch") && !strncmp(value, "/mnt/SDCARD/", 12)) {
+            return cJSON_AddStringToObject(record, key, value) != NULL;
+        }
         int n = snprintf(portable, sizeof portable, "/mnt/SDCARD%s", resolved + size);
         if (n < 0 || n >= (int)sizeof portable) {
             return false;

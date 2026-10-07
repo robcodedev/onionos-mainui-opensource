@@ -1541,6 +1541,20 @@ cJSON *mainui_catalog_record(MainUICatalog *catalog, int index)
         rom = entry->stored_path;
         art = entry->stored_image;
     }
+    else if (!app && entry->launch && entry->stored_path) {
+        /* A Search result, "<launcher>launch.sh:<ROM>": keep the ROM as Search
+         * spelled it, /mnt/SDCARD/Emu/GBC/../../Roms/..., the spelling ROM
+         * lists use and Onion's Game List Options recognizes as a game. */
+        const char *separator = strstr(entry->stored_path, "launch.sh:");
+        if (separator && !strncmp(separator + 10, "/mnt/SDCARD/", 12) &&
+            !strncmp(rom, "/mnt/SDCARD/", 12)) {
+            rom = separator + 10;
+        }
+        if (entry->stored_image && !strncmp(entry->stored_image, "/mnt/SDCARD/", 12) &&
+            !strncmp(art, "/mnt/SDCARD/", 12)) {
+            art = entry->stored_image;
+        }
+    }
     else if (!app && !entry->launch && !search_database(catalog, catalog->pages[1].path)) {
         int system = catalog->pages[0].view.selected;
         if (system < 0 || system >= catalog->pages[0].count) {

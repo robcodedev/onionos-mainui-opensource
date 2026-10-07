@@ -41,7 +41,8 @@ int main(int argc, char **argv)
     assert(mainui_search_open(&search, catalog, &view, "nested", 6));
     assert(search.results->count == 70 && search.view.selected == 0 && search.view.start == 0);
     assert(!strcmp(search.results->items[0].label, "nested00"));
-    assert(!strcmp(search.results->items[69].rom, "/mnt/SDCARD/Roms/Normal/Folder/nested69.nes"));
+    assert(!strcmp(search.results->items[69].rom,
+                   "/mnt/SDCARD/Emu/Normal/../../Roms/Normal/Folder/nested69.nes"));
     assert(!memcmp(&view, &original, sizeof view) && catalog->depth == 1);
     cJSON *search_view = cJSON_Parse("{\"currpos\":44,\"pagestart\":42,\"pageend\":47}");
     assert(mainui_search_restore_view(&search, search_view, search.results->items[44].json, 6));
