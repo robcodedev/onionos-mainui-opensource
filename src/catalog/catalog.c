@@ -234,10 +234,37 @@ static cJSON *read_config(const char *path, bool *read_failed)
     return json;
 }
 
+/* True when name contains part, ignoring case. */
+static bool contains_text(const char *name, const char *part)
+{
+    size_t n = strlen(part);
+    for (; *name; name++) {
+        size_t i = 0;
+        while (i < n && name[i] &&
+               tolower((unsigned char)name[i]) == tolower((unsigned char)part[i])) {
+            i++;
+        }
+        if (i == n) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* An empty extlist lists every file, as a console with no extlist can only
+ * mean, except the files MainUI and Onion keep beside the ROMs: the game
+ * lists, the ROM list caches with their build, journal and deletion files,
+ * and the copy of a ROM held while it is deleted. */
 static bool allowed(const char *name, const char *extensions)
 {
     const char *ext = strrchr(name, '.');
-    if (!ext || !*extensions) {
+    if (!*extensions) {
+        return compare_text(name, "miyoogamelist.xml", false) &&
+               compare_text(name, "gamelist.xml", false) &&
+               !(contains_text(name, "_cache") && contains_text(name, ".db")) &&
+               !contains_text(name, ".mainui-delete");
+    }
+    if (!ext) {
         return false;
     }
     ext++;
@@ -713,8 +740,8 @@ static bool saved_prefix(char out[MAINUI_PATH_MAX], const MainUICatalog *catalog
 
 /* Cache rows carry stock saved identities. Recursion is bounded and each folder
  * releases its decoded entries before returning. ROM files are never opened.
- * A folder gets a row only when a ROM matching the console's extlist lies
- * somewhere below it, so game data folders (a ScummVM game's AUDIO or
+ * A folder gets a row only when a ROM matching the console's extlist (any
+ * file when it is empty) lies somewhere below it, so game data folders (a ScummVM game's AUDIO or
  * DRIVERS, a port's data) and empty folders are not listed; *found counts
  * the ROMs added below path. Its row is added after its subtree. */
 static bool cache_scan(sqlite3_stmt *insert, MainUICatalog *catalog, const char *root,
