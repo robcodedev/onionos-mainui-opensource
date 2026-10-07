@@ -34,7 +34,7 @@ WAL caches are rejected by inspecting the database header before opening them wi
 
 Opening a system without its cache creates `<basename>_cache6.db` in its ROM root. The builder uses the reference eight-column schema, relative `path`/`ppath` keys, folder/game types, a transaction and a deferred browsing index. An exclusively reserved `.building` database is published only after successful commit/close. Existing caches are preserved unless `--refresh-caches` is explicitly requested. The main-menu SELECT action Refresh all roms invokes the same builder. Confirmed corrupt caches also rebuild automatically on system entry; failed repair uses scan fallback.
 
-Without XML, only names and directory metadata are scanned; ROM contents are not read and `disp` strips the extension. With XML, `disp` comes from `<name>`. Shortname filesystem rebuilds now resolve Arcade labels from the Onion name file. Both pinyin fields now store [reference-style initials](SEARCH_METADATA_THEME.md). `tools/test_cache_build.py` verifies nested paths, quoted system names, integrity, explicit refresh and failed publication.
+Without XML, only names and directory metadata are scanned, and folders named `Imgs` or `Manuals` (in any case) or the console's image folder are never listed; ROM contents are not read and `disp` strips the extension. With XML, `disp` comes from `<name>`. Shortname filesystem rebuilds now resolve Arcade labels from the Onion name file. Both pinyin fields now store [reference-style initials](SEARCH_METADATA_THEME.md). `tools/test_cache_build.py` verifies nested paths, quoted system names, integrity, explicit refresh and failed publication.
 
 
 ## XML import checkpoint

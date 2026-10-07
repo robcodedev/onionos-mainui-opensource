@@ -372,8 +372,10 @@ static bool visit(MainUICatalogPage *page, const char *sd, const char *name, boo
         cJSON_Delete(json);
         return ok;
     }
-    if (directory &&
-        (!compare_text(name, "Imgs", false) || !compare_text(scratch->path, page->images, false))) {
+    /* Box art and manuals live beside the ROMs; neither folder is a ROM
+     * folder. Names are matched without regard to case. */
+    if (directory && (!compare_text(name, "Imgs", false) || !compare_text(name, "Manuals", false) ||
+                      !compare_text(scratch->path, page->images, false))) {
         return true;
     }
     if (!directory && !allowed(name, page->extensions)) {

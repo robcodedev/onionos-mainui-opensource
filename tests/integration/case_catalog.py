@@ -14,7 +14,8 @@ for system,label,extensions in [('FC','NES','nes|zip'),('GB','Game Boy','gb'),('
  emu=sd/'Emu'/system;emu.mkdir(parents=True)
  (emu/'config.json').write_text(json.dumps(dict(label=label,rompath=f'../../Roms/{system}',extlist=extensions,imgpath=f'../../Roms/{system}/Imgs')))
  (sd/'Roms'/system).mkdir(parents=True)
-for name in ['Adventure.nes','alpha.zip','Zebra.NES','ignored.txt','Imgs/cover.nes','Collections/Nested.nes','Collections/More/Deep.nes']:
+# Imgs and Manuals folders, in any case, are never listed as ROM folders.
+for name in ['Adventure.nes','alpha.zip','Zebra.NES','ignored.txt','Imgs/cover.nes','Manuals/Guide.nes','Collections/Nested.nes','Collections/More/Deep.nes','Collections/manuals/Inner.nes']:
  p=sd/'Roms/FC'/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'')
 (sd/'Roms/FC/Empty').mkdir()
 subprocess.run([str(BUILD / "fixture-catalog"),str(sd)],cwd=ROOT,check=True,timeout=30)
@@ -25,6 +26,7 @@ with sqlite3.connect(db) as c:
  assert c.execute("select count(*) from FC_roms where ppath='.'").fetchone()==(5,)
  assert c.execute("select count(*) from sqlite_master where name='mainui_rom_browse'").fetchone()==(1,)
  assert c.execute("select path from FC_roms where ppath='Collections/More'").fetchone()==('/mnt/SDCARD/Emu/FC/../../Roms/FC/Collections/More/Deep.nes',)
+ assert c.execute("select count(*) from FC_roms where path like '%anuals%'").fetchone()==(0,)
 print('Created cache schema, index, nested keys and integrity verified')
 
 xml_sd = Path(tempfile.mkdtemp(prefix='catalog-xml-record-', dir=BUILD))
