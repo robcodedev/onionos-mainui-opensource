@@ -719,11 +719,15 @@ bool mainui_theme_open_sd(MainUITheme *t, const char *dir, const char *base, con
     if (hint_size < 1 || hint_size > 120) {
         hint_size = 40;
     }
-    t->grid_font = font_open(t, json_string(grid, "font"), grid_size);
+    /* Differs from stock on purpose: stock makes console labels bold in any
+     * font, which thickens a theme's own grid.font (a pixel font, say). Here
+     * only the built-in font is made bold; a theme's font keeps its weight. */
+    const char *grid_face = json_string(grid, "font");
+    t->grid_font = font_open(t, grid_face, grid_size);
     int expert_size = json_int(grid, "grid3x4", grid_size);
-    t->expert_font = font_open(t, json_string(grid, "font"),
-                               expert_size > 0 && expert_size <= 120 ? expert_size : grid_size);
-    if (t->expert_font) {
+    t->expert_font =
+        font_open(t, grid_face, expert_size > 0 && expert_size <= 120 ? expert_size : grid_size);
+    if (t->expert_font && !grid_face) {
         TTF_SetFontStyle(t->expert_font, TTF_STYLE_BOLD);
     }
     /* Hint text (footer hints, counter, dialog actions) has its own font, as
@@ -732,7 +736,7 @@ bool mainui_theme_open_sd(MainUITheme *t, const char *dir, const char *base, con
      * style is the font file's own. */
     const char *hint_face = json_string(hint, "font");
     t->hint_font = font_open(t, hint_face, hint_size);
-    if (t->grid_font) {
+    if (t->grid_font && !grid_face) {
         TTF_SetFontStyle(t->grid_font, TTF_STYLE_BOLD);
     }
     t->grid_color[0] = theme_color(grid, "color", (SDL_Color){104, 104, 104, 0});

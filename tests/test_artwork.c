@@ -152,17 +152,20 @@ int main(int argc, char **argv)
     assert(mainui_theme_open_sd(&theme, active, builtin, root, &config));
     {
         /* Without hint.font, hints use the default font (Exo 2 Bold Italic,
-         * italic by its own face), not the title's; with one, that font. */
+         * italic by its own face), not the title's; with one, that font.
+         * Console labels are made bold only in the default font: a theme's
+         * grid.font keeps its own weight (stock would make it bold). */
         char fonts[1024], title_font[4096], name[2][4096], fonts_config[4096];
         snprintf(fonts, sizeof fonts, "%s/fonts", root);
         assert(mkdir_0755(fonts) == 0);
         TEST_PATH(title_font, "%s/BPreplayBold.otf", builtin);
         const char *configs[] = {"{\"title\":{\"font\":\"%s\"}}",
-                                 "{\"title\":{\"font\":\"%s\"},\"hint\":{\"font\":\"%s\"}}"};
+                                 "{\"title\":{\"font\":\"%s\"},\"hint\":{\"font\":\"%s\"},"
+                                 "\"grid\":{\"font\":\"%s\"}}"};
         for (int i = 0; i < 2; i++) {
             TEST_PATH(fonts_config, "%s/config.json", fonts);
             file = fopen(fonts_config, "wb");
-            assert(file && fprintf(file, configs[i], title_font, title_font) > 0 &&
+            assert(file && fprintf(file, configs[i], title_font, title_font, title_font) > 0 &&
                    fclose(file) == 0);
             MainUITheme fonted = {0};
             assert(mainui_theme_open_sd(&fonted, fonts, builtin, root, &config));
@@ -170,6 +173,9 @@ int main(int argc, char **argv)
             snprintf(name[1], sizeof name[1], "%s", TTF_FontFaceFamilyName(fonted.title_font));
             assert(i ? !strcmp(name[0], name[1]) : strcmp(name[0], name[1]) != 0);
             assert(i || strstr(name[0], "Exo"));
+            int label_style = i ? TTF_STYLE_NORMAL : TTF_STYLE_BOLD;
+            assert(TTF_GetFontStyle(fonted.grid_font) == label_style);
+            assert(TTF_GetFontStyle(fonted.expert_font) == label_style);
             mainui_theme_close(&fonted);
         }
     }
