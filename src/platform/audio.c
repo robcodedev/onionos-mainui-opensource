@@ -142,13 +142,12 @@ bool mainui_audio_open(const char *theme, const char *fallback, int volume)
         mainui_audio_close();
         return false;
     }
-    /* 44100 is requested but the SSD202D audio-out runs at 48000. MI_AO rejects
-     * the change (MI_AO_SetPubAttr, error 0xa0052009) and keeps 48000, so the
-     * device logs that error on every launch and SDL is left believing it has a
-     * 44100 device. Harmless so far -- menu sounds still play -- but requesting
-     * 48000 here is the obvious thing to try. Not changed yet because it is
-     * unverified on hardware. See docs/internal/DEVICE_AUDIO.md. */
-    if (audio.open(44100, AUDIO_S16SYS, 2, 1024) != 0) {
+    /* The SSD202D audio-out runs at 48000 and keeps that rate whatever is
+     * requested, and the firmware's SDL_mixer does not resample MP3. Asking for
+     * 44100 played 48 kHz bgm.mp3 about 8% slow and low; 48000 plays it at its
+     * own speed. A 44.1 kHz bgm.mp3 now plays slightly fast, as with stock.
+     * WAV sounds are converted on load and are unaffected. */
+    if (audio.open(48000, AUDIO_S16SYS, 2, 1024) != 0) {
         audio_failed("Mix_OpenAudio failed");
         SDL_QuitSubSystem(SDL_INIT_AUDIO);
         mainui_audio_close();
