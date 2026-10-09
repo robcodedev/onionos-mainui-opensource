@@ -167,9 +167,11 @@ void mainui_draw_apps(SDL_Surface *screen, MainUITheme *theme, MainUICatalog *ap
         if (!app) {
             continue;
         }
-        /* Four 90px rows fill the content area, 60..419, as stock. */
-        int y = 60 + (i - view->start) * 90;
-        SDL_Rect clip = {0, (Sint16)y, 640, (Uint16)(y + 90 > 420 ? 420 - y : 90)};
+        /* Four 90px rows from y=62, as stock draws them. Each is drawn in
+         * full: the fourth's highlight reaches y=421, over the footer's top
+         * 2 px, as in stock; clipping it at 420 cut off a framed highlight. */
+        int y = 62 + (i - view->start) * 90;
+        SDL_Rect clip = {0, (Sint16)y, 640, 90};
         SDL_SetClipRect(screen, &clip);
         if (i == view->selected) {
             mainui_blit(screen, selection, 0,
