@@ -26,7 +26,6 @@ void mainui_draw_context(SDL_Surface *screen, MainUITheme *theme, const MainUICo
     if (!context->visible_count) {
         return;
     }
-    mainui_dim_popup_background(screen, theme);
     mainui_draw_popup_footer(screen, theme);
     int rows = context->visible_count < 6 ? context->visible_count : 6;
     SDL_Surface *background = mainui_theme_popup_background(theme, rows);

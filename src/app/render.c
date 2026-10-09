@@ -630,6 +630,13 @@ static bool compose_full_frame(MainUIApp *ui)
         }
         draw_list_counter(ui->screen, &ui->theme, ui->library, ui->catalog, &ui->view);
     }
+    /* Stock's popup, message and dialog windows darken the screen above the
+     * footer before drawing, once however many are open. A frame kept while a
+     * catalog job runs is already darkened, so it is not darkened again. */
+    if (!ui->catalog_job.thread && ((ui->context_open && ui->context.visible_count) ||
+                                    ui->confirmation >= 0 || *ui->message_title)) {
+        mainui_dim_popup_background(ui->screen, &ui->theme);
+    }
     if (ui->context_open) {
         mainui_draw_context(ui->screen, &ui->theme, &ui->context);
     }
