@@ -69,7 +69,7 @@ for config in (dict(label='All', rompath='../../Roms/ALL', extlist=''),
     all_sd = Path(tempfile.mkdtemp(prefix='catalog-all-', dir=BUILD))
     (all_sd / 'Emu/ALL').mkdir(parents=True)
     (all_sd / 'Emu/ALL/config.json').write_text(json.dumps(config))
-    for name in ('Game.bin', 'NOEXT', 'Disc/Track.iso', 'Data/readme.txt', 'gamelist.xml',
+    for name in ('Game.bin', 'Pair.bin', 'Pair.cue', 'NOEXT', 'Disc/Track.iso', 'Data/readme.txt', 'gamelist.xml',
                  'Imgs/Game.png', 'Manuals/Game.pdf', '.hidden', 'Empty/.keep',
                  'Old_cache2.db', 'Game.bin.mainui-delete.0000000000000001'):
         file = all_sd / 'Roms/ALL' / name
@@ -80,6 +80,41 @@ for config in (dict(label='All', rompath='../../Roms/ALL', extlist=''),
                    cwd=ROOT, check=True, timeout=30, capture_output=True)
     with sqlite3.connect(all_sd / 'Roms/ALL/ALL_cache6.db') as c:
         rows = sorted(c.execute('select disp,type,ppath from ALL_roms'))
+        pair = c.execute("select path from ALL_roms where disp='Pair'").fetchall()
     assert rows == [('Data', 1, '.'), ('Disc', 1, '.'), ('Game', 0, '.'), ('NOEXT', 0, '.'),
-                    ('Track', 0, 'Disc'), ('readme', 0, 'Data')], (config, rows)
+                    ('Pair', 0, '.'), ('Track', 0, 'Disc'), ('readme', 0, 'Data')], (config, rows)
+    assert len(pair) == 1 and pair[0][0].endswith('/Pair.cue'), pair
 print('An empty or missing extlist lists every file but MainUI and Onion files')
+
+# A .bin beside the .cue of the same name is hidden, as in stock, also when
+# the extlist names bin; a lone .bin stays, and only a lowercase .bin is hidden.
+cue_sd = Path(tempfile.mkdtemp(prefix='catalog-cue-', dir=BUILD))
+(cue_sd / 'Emu/PS').mkdir(parents=True)
+(cue_sd / 'Emu/PS/config.json').write_text(json.dumps(dict(
+    label='PlayStation', rompath='../../Roms/PS', extlist='bin|cue')))
+for name in ('Disc.bin', 'Disc.cue', 'Lone.bin', 'Upper.BIN', 'Upper.cue', 'Set/Inner.bin',
+             'Set/Inner.cue', 'Other/Inner.bin'):
+    file = cue_sd / 'Roms/PS' / name
+    file.parent.mkdir(parents=True, exist_ok=True)
+    file.write_bytes(b'')
+subprocess.run([str(BUILD / 'MainUI-dev'), '--sd-root', str(cue_sd), '--theme', str(ONION_THEME),
+                '--refresh-caches', '--system', 'PlayStation', '--snapshot', str(cue_sd / 'shot.bmp')],
+               cwd=ROOT, check=True, timeout=30, capture_output=True)
+with sqlite3.connect(cue_sd / 'Roms/PS/PS_cache6.db') as c:
+    files = sorted(path.rsplit('/Roms/PS/', 1)[1]
+                   for (path,) in c.execute('select path from PS_roms where type=0'))
+assert files == ['Disc.cue', 'Lone.bin', 'Other/Inner.bin', 'Set/Inner.cue', 'Upper.BIN',
+                 'Upper.cue'], files
+# Unlike stock, a .bin stays listed when the extlist does not list the .cue:
+# with extlist "bin" stock would list neither file.
+(cue_sd / 'Emu/PS/config.json').write_text(json.dumps(dict(
+    label='PlayStation', rompath='../../Roms/PS', extlist='bin')))
+(cue_sd / 'Roms/PS/PS_cache6.db').unlink()
+subprocess.run([str(BUILD / 'MainUI-dev'), '--sd-root', str(cue_sd), '--theme', str(ONION_THEME),
+                '--refresh-caches', '--system', 'PlayStation', '--snapshot', str(cue_sd / 'shot.bmp')],
+               cwd=ROOT, check=True, timeout=30, capture_output=True)
+with sqlite3.connect(cue_sd / 'Roms/PS/PS_cache6.db') as c:
+    files = sorted(path.rsplit('/Roms/PS/', 1)[1]
+                   for (path,) in c.execute('select path from PS_roms where type=0'))
+assert files == ['Disc.bin', 'Lone.bin', 'Other/Inner.bin', 'Set/Inner.bin', 'Upper.BIN'], files
+print('A .bin beside its listed .cue is hidden; a lone .bin, or one whose .cue is not listed, stays')

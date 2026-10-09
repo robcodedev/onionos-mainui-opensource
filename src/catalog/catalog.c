@@ -289,6 +289,23 @@ static bool allowed(const char *name, const char *extensions)
     return false;
 }
 
+/* As stock: a ROM ending in .bin is hidden when the .cue of the same name is
+ * beside it, as the cue is what starts the game. Spelled as stock checks it,
+ * with a lowercase .bin and .cue. Unlike stock, only when the extlist lists
+ * that .cue: with extlist "bin" stock hides the .bin and lists no .cue, so
+ * the game disappears. `cue` receives the cue's path. */
+static bool cue_beside(const char *path, const char *extensions, char cue[MAINUI_PATH_MAX])
+{
+    size_t length = strlen(path);
+    if (length < 4 || length >= MAINUI_PATH_MAX || strcmp(path + length - 4, ".bin") ||
+        !allowed("game.cue", extensions)) {
+        return false;
+    }
+    memcpy(cue, path, length - 4);
+    memcpy(cue + length - 4, ".cue", 5);
+    return access(cue, F_OK) == 0;
+}
+
 typedef struct {
     char path[MAINUI_PATH_MAX], config[MAINUI_PATH_MAX], roms[MAINUI_PATH_MAX];
     char images[MAINUI_PATH_MAX], launch[MAINUI_PATH_MAX], resolved[MAINUI_PATH_MAX];
@@ -406,7 +423,8 @@ static bool visit(MainUICatalogPage *page, const char *sd, const char *name, boo
                       !compare_text(scratch->path, page->images, false))) {
         return true;
     }
-    if (!directory && !allowed(name, page->extensions)) {
+    if (!directory && (!allowed(name, page->extensions) ||
+                       cue_beside(scratch->path, page->extensions, scratch->resolved))) {
         return true;
     }
     snprintf(scratch->label, sizeof scratch->label, "%s", name);
