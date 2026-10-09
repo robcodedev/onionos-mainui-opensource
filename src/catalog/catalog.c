@@ -251,15 +251,15 @@ static bool contains_text(const char *name, const char *part)
     return false;
 }
 
-/* An empty extlist lists every file, as a console with no extlist can only
- * mean, except the files MainUI and Onion keep beside the ROMs: the game
- * lists, the ROM list caches with their build, journal and deletion files,
- * and the copy of a ROM held while it is deleted. */
+/* An empty extlist lists every file with an extension, as in stock, except
+ * the files MainUI and Onion keep beside the ROMs: the game lists, the ROM
+ * list caches with their build, journal and deletion files, and the copy of
+ * a ROM held while it is deleted. */
 static bool allowed(const char *name, const char *extensions)
 {
     const char *ext = strrchr(name, '.');
     if (!*extensions) {
-        return compare_text(name, "miyoogamelist.xml", false) &&
+        return ext && compare_text(name, "miyoogamelist.xml", false) &&
                compare_text(name, "gamelist.xml", false) &&
                !(contains_text(name, "_cache") && contains_text(name, ".db")) &&
                !contains_text(name, ".mainui-delete");

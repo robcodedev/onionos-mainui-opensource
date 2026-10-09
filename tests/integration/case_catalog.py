@@ -62,8 +62,9 @@ for mode, rompath, imgpath in (
     subprocess.run([str(BUILD / 'fixture-catalog'), str(xml_sd), mode],
                    cwd=ROOT, check=True, timeout=30)
 
-# An empty or missing extlist lists every file, except the game lists, ROM
-# list caches and deletion copies kept beside the ROMs, and hidden files.
+# An empty or missing extlist lists every file with an extension (NOEXT is
+# left out, as in stock), except the game lists, ROM list caches and deletion
+# copies kept beside the ROMs, and hidden files.
 for config in (dict(label='All', rompath='../../Roms/ALL', extlist=''),
                dict(label='All', rompath='../../Roms/ALL')):
     all_sd = Path(tempfile.mkdtemp(prefix='catalog-all-', dir=BUILD))
@@ -81,10 +82,10 @@ for config in (dict(label='All', rompath='../../Roms/ALL', extlist=''),
     with sqlite3.connect(all_sd / 'Roms/ALL/ALL_cache6.db') as c:
         rows = sorted(c.execute('select disp,type,ppath from ALL_roms'))
         pair = c.execute("select path from ALL_roms where disp='Pair'").fetchall()
-    assert rows == [('Data', 1, '.'), ('Disc', 1, '.'), ('Game', 0, '.'), ('NOEXT', 0, '.'),
-                    ('Pair', 0, '.'), ('Track', 0, 'Disc'), ('readme', 0, 'Data')], (config, rows)
+    assert rows == [('Data', 1, '.'), ('Disc', 1, '.'), ('Game', 0, '.'), ('Pair', 0, '.'),
+                    ('Track', 0, 'Disc'), ('readme', 0, 'Data')], (config, rows)
     assert len(pair) == 1 and pair[0][0].endswith('/Pair.cue'), pair
-print('An empty or missing extlist lists every file but MainUI and Onion files')
+print('An empty or missing extlist lists every file with an extension but MainUI and Onion files')
 
 # A .bin beside the .cue of the same name is hidden, as in stock, also when
 # the extlist names bin; a lone .bin stays, and only a lowercase .bin is hidden.
