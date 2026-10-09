@@ -1,5 +1,38 @@
 # Changelog
 
+## 1.0.6 - 2026-10-09
+
+### Buttons
+
+* X acts as B (back, close, cancel) on every screen, as stock does; it did nothing on most screens and opened search in a ROM list. Search there stays in the context menu (Select or Menu), and in the on-screen keyboard X still types a space. Thanks to [@Veuks](https://github.com/Veuks) for the report.
+* The button mapping in `system.json` (`keymap`) is handed to the device's button driver at start, as stock does; before, it was ignored. A `keymap` that is not eight button names (`L2`, `L`, `R2`, `R`, `X`, `A`, `B`, `Y`) is ignored and the default is used, so a typo cannot leave the buttons unusable.
+
+### Themes and screens
+
+* A theme whose context-menu background is a full-screen image (Super Onion Entertainment System Remix, RetroRama and others) shows it as it is. A 5- or 6-row menu built it from the 4-row image by repeating its top band, which pushed the rest of the picture down. Thanks to [@QuackWalks](https://github.com/QuackWalks) for the report.
+* The screen behind messages and confirmations is darkened, as behind the context menu and as in stock.
+* Console and main-menu labels drawn in a theme's own font (`grid.font`) keep that font's weight. Before, MainUI made them bold, as stock does, which thickened pixel fonts such as Super Onion Entertainment System Remix's. Labels in the default font stay bold. Thanks to [@QuackWalks](https://github.com/QuackWalks) for the report.
+* Expert console labels use stock's font for them: `grid.fontascii`, or without it the list font, at the `grid.grid3x4` size, in the font's own style. A theme that hides its Games labels with a blank `grid.font`, such as ONION PS, now shows its Expert labels, as stock does. `grid.grid3x4` set to 0 still hides them. A theme without `grid.grid1x4` gets stock's 25 for the Games labels, instead of 24. Thanks to [@Zazzago](https://github.com/Zazzago) for the report.
+* Expert draws its selection mark 2 px further right and down, and its icons and labels 1 px lower, so the grid matches stock's pixel for pixel.
+* The battery percentage and the page counter sit where stock puts them. Both were 1 px too low with some themes.
+* The home screen's header logo (`miyoo-topbar.png`) is no longer cut off at the header. A theme can draw below it with a tall image, as stock allows; Super Onion Entertainment System shows its row of dots under the home icons again.
+* The Wi-Fi icon is centered in stock's status slot left of the battery (x 504), so a theme's wide Wi-Fi image lands where the theme expects it. Super Onion Entertainment System Remix's cloud covered the end of the title, and the icon of themes with very wide images, such as BMO, was drawn off-screen. Thanks to [@QuackWalks](https://github.com/QuackWalks) for the report.
+* The Apps list's rows start at y=62 again, as a stock screenshot shows they do. The fourth row is drawn in full, its highlight reaching 2 px over the footer as in stock, so a framed highlight is no longer cut off at the bottom; 1.0.5 moved the rows up 2 px instead.
+
+### Lists
+
+* The Apps list keeps the order the SD card lists the app folders in, as stock does, instead of sorting them by name. On FAT that is usually the order they were copied in, so Quick Guide may come first. An empty file named `.appsort` in `.tmp_update/config` sorts them by name instead.
+* A `.bin` file is no longer listed beside the `.cue` of the same name, as in stock; the `.cue` starts the game. Unlike stock, the `.bin` stays when the `extlist` does not list `.cue` files, so the game is never left without an entry. Run Refresh roms for a console whose cache lists both.
+* A console with an empty or no `extlist` leaves out files without an extension, such as `README`, as stock does. Run Refresh roms for such a console.
+
+### Sound
+
+* Theme music recorded at 48 kHz, as in most themes, plays at its proper speed and pitch instead of about 8% slow and low. Music recorded at 44.1 kHz now plays slightly fast, as with stock. Thanks to [@QuackWalks](https://github.com/QuackWalks) for the report.
+
+### Documentation and tests
+
+* [docs/CATALOG_CACHE.md](docs/CATALOG_CACHE.md) lists how ROM lists differ from stock: which files each leaves out, and the sort order, which also applies to the Games and Expert grids.
+
 ## 1.0.5 - 2026-10-07
 
 ### Buttons
