@@ -175,7 +175,11 @@ int main(int argc, char **argv)
             assert(i || strstr(name[0], "Exo"));
             int label_style = i ? TTF_STYLE_NORMAL : TTF_STYLE_BOLD;
             assert(TTF_GetFontStyle(fonted.grid_font) == label_style);
-            assert(TTF_GetFontStyle(fonted.expert_font) == label_style);
+            /* Expert labels: the list font (here the title's, as no list.font
+             * is set), never bold, whatever grid.font is. */
+            assert(TTF_GetFontStyle(fonted.expert_font) == TTF_STYLE_NORMAL);
+            assert(!strcmp(TTF_FontFaceFamilyName(fonted.expert_font),
+                           TTF_FontFaceFamilyName(fonted.menu_font)));
             mainui_theme_close(&fonted);
         }
     }

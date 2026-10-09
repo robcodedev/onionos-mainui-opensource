@@ -336,12 +336,12 @@ void mainui_menu_view_page(MainUIMenuView *view, MainUICatalog *catalog,
             view->console_icons[i][1] = view->console_icons[i][0];
         }
         for (int selected = 0; selected < 2; selected++) {
-            bool expert_font = expert && theme->expert_font;
-            bool hidden = expert_font ? theme->hide_expert_text : theme->hide_grid_text;
+            /* Expert has its own label font (theme.c); grid3x4 = 0 hides it. */
+            bool hidden = expert ? theme->hide_expert_text : theme->hide_grid_text;
+            TTF_Font *font = expert && theme->expert_font ? theme->expert_font : theme->grid_font;
             view->console_labels[i][selected] =
                 hidden ? NULL
-                       : TTF_RenderUTF8_Blended(expert_font ? theme->expert_font : theme->grid_font,
-                                                entry->label, theme->grid_color[selected]);
+                       : TTF_RenderUTF8_Blended(font, entry->label, theme->grid_color[selected]);
         }
     }
     view->cached_start = position->start;

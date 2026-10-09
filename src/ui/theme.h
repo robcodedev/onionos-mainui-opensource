@@ -42,7 +42,6 @@ typedef struct {
     unsigned text_clock;
     SDL_Surface *detail_default;
     bool detail_default_loaded;
-    TTF_Font *expert_font;
     TTF_Font *battery_font;
     SDL_Surface *battery_icons[6];
     SDL_Surface *wifi_connected, *wifi_locked, *wifi_signal[4];
@@ -56,6 +55,7 @@ typedef struct {
         *detail_font;
     SDL_Surface *tiles[2], *dots[2], *buttons[2];
     SDL_Surface *expert_selection; /* skin/bg-ra-list-item.png */
+    TTF_Font *expert_font;         /* Expert labels: grid.fontascii or list.font */
     SDL_Surface *popup_dim;        /* black at 0xAA alpha over 640x420 */
     SDL_Color grid_color[2], hint_color, title_color, page_color, total_color;
     bool hide_icons, hide_hints;

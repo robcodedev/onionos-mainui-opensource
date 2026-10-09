@@ -712,9 +712,9 @@ bool mainui_theme_open_sd(MainUITheme *t, const char *dir, const char *base, con
     t->hide_hint_text = zero_size(hint, "size");
     t->hide_grid_text = zero_size(grid, "grid1x4");
     t->hide_expert_text = zero_size(grid, "grid3x4");
-    int grid_size = json_int(grid, "grid1x4", 24), hint_size = json_int(hint, "size", title_size);
+    int grid_size = json_int(grid, "grid1x4", 25), hint_size = json_int(hint, "size", title_size);
     if (grid_size < 1 || grid_size > 120) {
-        grid_size = 24;
+        grid_size = 25;
     }
     if (hint_size < 1 || hint_size > 120) {
         hint_size = 40;
@@ -724,12 +724,14 @@ bool mainui_theme_open_sd(MainUITheme *t, const char *dir, const char *base, con
      * only the built-in font is made bold; a theme's font keeps its weight. */
     const char *grid_face = json_string(grid, "font");
     t->grid_font = font_open(t, grid_face, grid_size);
-    int expert_size = json_int(grid, "grid3x4", grid_size);
-    t->expert_font =
-        font_open(t, grid_face, expert_size > 0 && expert_size <= 120 ? expert_size : grid_size);
-    if (t->expert_font && !grid_face) {
-        TTF_SetFontStyle(t->expert_font, TTF_STYLE_BOLD);
-    }
+    /* Expert labels, as stock's small grid font: grid.fontascii, or without
+     * it the list font, at the grid3x4 size (18 by default), in the font
+     * file's own style. A theme hiding its console labels with a blank
+     * grid.font (AdobeBlank) still shows them in Expert, as in stock. */
+    const char *expert_face = json_string(grid, "fontascii");
+    int expert_size = json_int(grid, "grid3x4", 18);
+    t->expert_font = font_open(t, expert_face ? expert_face : list_face,
+                               expert_size >= 1 && expert_size <= 120 ? expert_size : 18);
     /* Hint text (footer hints, counter, dialog actions) has its own font, as
      * stock's label font: hint.font, or without one the default font
      * (Exo 2 Bold Italic, or the language font), never the title's. Its
@@ -898,11 +900,11 @@ void mainui_theme_close(MainUITheme *t)
             SDL_FreeSurface(t->buttons[i]);
         }
     }
-    if (t->expert_font) {
-        TTF_CloseFont(t->expert_font);
-    }
     if (t->grid_font) {
         TTF_CloseFont(t->grid_font);
+    }
+    if (t->expert_font) {
+        TTF_CloseFont(t->expert_font);
     }
     if (t->hint_font) {
         TTF_CloseFont(t->hint_font);
