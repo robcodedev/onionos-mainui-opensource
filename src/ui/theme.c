@@ -307,7 +307,10 @@ static SDL_Surface *popup_background(MainUITheme *theme, int rows)
             }
         }
     }
-    if (!source || source_rows == rows || source->h < source_rows * 60) {
+    /* An image already tall enough for every row, such as a full-screen
+     * background, is drawn as it is: repeating its top band would push the
+     * rest of the picture down. */
+    if (!source || source_rows == rows || source->h < source_rows * 60 || source->h >= rows * 60) {
         return source;
     }
     int trim = source->h - source_rows * 60;

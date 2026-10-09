@@ -96,6 +96,15 @@ int main(int argc, char **argv)
     initialize(&theme, active, fallback);
     assert(mainui_theme_popup_background(&theme, 6)->w == 111);
     mainui_theme_close(&theme);
+    /* A full-screen background with fewer rows is not expanded for more
+     * rows: its top band would repeat and push the picture down. */
+    picture(active, "skin/bg-pop-menu-4.png", 640, 480, 90);
+    initialize(&theme, active, fallback);
+    for (int rows = 5; rows <= 6; rows++) {
+        popup = mainui_theme_popup_background(&theme, rows);
+        assert(popup && popup->w == 640 && popup->h == 480);
+    }
+    mainui_theme_close(&theme);
     /* Profile skin images override the theme's, and are cached per open. */
     const char *parts[] = {"Saves", "Saves/CurrentProfile", "Saves/CurrentProfile/theme",
                            "Saves/CurrentProfile/theme/skin"};
