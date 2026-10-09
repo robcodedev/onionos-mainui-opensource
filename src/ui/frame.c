@@ -107,12 +107,12 @@ static void header_battery(SDL_Surface *screen, MainUITheme *theme)
     int origin = 596 - width / 2;
     int level = theme->wifi_signal_level;
     SDL_Surface *wifi = theme->wifi_signal[level >= 2 && level <= 3 ? level : 1];
+    /* Stock (0x16980, 0x1622c) gives each status icon a 48x48 slot from the
+     * right, 620 - (68 * slot + 48), y 6, and centers the image in it. The
+     * battery holds slot 0, so Wi-Fi is slot 1 at x 504, whatever the
+     * battery's width; a wider image, as some themes ship, spreads from it. */
     if (theme->wifi_online && wifi) {
-        int edge = origin + icon_x;
-        if (text && origin + text_x + theme->battery_offset_x < edge) {
-            edge = origin + text_x + theme->battery_offset_x;
-        }
-        mainui_blit(screen, wifi, edge - 8 - wifi->w, 30 - wifi->h / 2);
+        mainui_blit(screen, wifi, 504 + (48 - wifi->w) / 2, 6 + (48 - wifi->h) / 2);
     }
     /* As Onion's battery surface: an even height of at least 48 (its
      * icon->w is Onion's own, kept for the same pixels), centered at y=30,

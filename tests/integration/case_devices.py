@@ -40,4 +40,24 @@ assert connected != capture("wifi-disconnected", ["--device-dir", str(RUNTIME), 
 capture("about", ["--device-dir", str(RUNTIME), "--input", "EDE"])
 capture("scan-request", ["--device-dir", str(RUNTIME), "--input", "EEDDDDE"])
 assert (RUNTIME / "mainui-wifi-request.sh").read_text() == "wpa_cli scan\nwpa_cli scan_results\n"
+# The Wi-Fi icon sits in stock's second 48x48 status slot (x 504, y 6),
+# centered in it: a 200x52 image, as Super Onion Entertainment System Remix
+# ships, spans x 428-627 from y 4.
+from PIL import Image  # noqa: E402
+WIFI = (12, 201, 34)
+wifi_theme = ROOT_TEST / "wifi-theme"
+(wifi_theme / "skin").mkdir(parents=True)
+(wifi_theme / "config.json").write_bytes((ONION_THEME / "config.json").read_bytes())
+for level in ("02", "03", "04"):
+    Image.new("RGB", (200, 52), WIFI).save(wifi_theme / f"skin/icon-wifi-signal-{level}.png")
+(RUNTIME / "wifi-status.txt").write_text("wpa_state=COMPLETED\nssid=Host Wi-Fi\n")
+shot = ROOT_TEST / "wifi-slot.bmp"
+result = subprocess.run([EXE, "--sd-root", str(SD), "--theme", str(wifi_theme), "--fallback",
+                         str(ONION_THEME), "--device-dir", str(RUNTIME), "--snapshot", str(shot)],
+                        capture_output=True, text=True, timeout=30)
+assert result.returncode == 0, result.stderr
+with Image.open(shot) as image:
+    header = image.convert("RGB")
+assert header.getpixel((428, 10)) == WIFI and header.getpixel((427, 10)) != WIFI
+assert header.getpixel((500, 4)) == WIFI and header.getpixel((500, 3)) != WIFI
 print("Device adapter fixtures passed:", ROOT_TEST)
