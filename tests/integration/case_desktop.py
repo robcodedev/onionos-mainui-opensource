@@ -37,7 +37,8 @@ def capture(name, actions):
                     '--snapshot',str(path),'--input',actions],cwd=ROOT,check=True,timeout=20)
     return path.read_bytes()
 home = capture('home','')
-# SELECT retains its context menu; unassigned X/Y/START/MENU are silent.
+# SELECT retains its context menu; X acts as B, which does nothing here, and
+# unassigned Y/START/MENU are silent.
 assert capture('button-S', 'S') != home
 for key in 'XYTM':
     assert capture('button-' + key, key) == home

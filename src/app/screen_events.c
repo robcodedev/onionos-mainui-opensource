@@ -1004,16 +1004,6 @@ bool mainui_screen_list_key(MainUIApp *ui, SDLKey key)
 
 bool mainui_screen_search_key(MainUIApp *ui, SDLKey key)
 {
-    if (ui->catalog && ui->catalog->depth && !ui->library && key == SDLK_LSHIFT) {
-        if (!mainui_positions_save(ui->catalog, &ui->view)) {
-            fprintf(stderr, "Could not save source ROM-list position.\n");
-        }
-        ui->search_keyboard = true;
-        mainui_name_input_open(&ui->name_input, &ui->theme, 153,
-                               ui->input_text ? ui->input_text : "");
-        ui->input_text = NULL;
-        return true;
-    }
     if (ui->search.results && key == SDLK_ESCAPE) {
         if (ui->search.postgame) {
             mainui_launch_clear_search(ui->handoff_dir);
@@ -1038,7 +1028,10 @@ bool mainui_screen_search_key(MainUIApp *ui, SDLKey key)
 
 static void dispatch_key(MainUIApp *ui, SDL_Event *event)
 {
-    SDLKey key = mainui_input_key(event->key.keysym.sym);
+    SDLKey pressed = mainui_input_key(event->key.keysym.sym);
+    /* X acts as B, as stock's menus, grids, lists, Settings and dialogs all
+     * treat it (the on-screen keyboard, handled before this, types a space). */
+    SDLKey key = pressed == SDLK_LSHIFT ? SDLK_ESCAPE : pressed;
     if (ui->device_enabled && ui->device_status.sleeping == 1) {
         return;
     }
@@ -1061,10 +1054,10 @@ static void dispatch_key(MainUIApp *ui, SDL_Event *event)
         ui->search.release_pending = false;
     }
     ui->search.view = ui->view;
-    bool was_held = key >= 0 && key < SDLK_LAST && ui->held[key];
+    bool was_held = pressed >= 0 && pressed < SDLK_LAST && ui->held[pressed];
 
-    if (key >= 0 && key < SDLK_LAST) {
-        ui->held[key] = true;
+    if (pressed >= 0 && pressed < SDLK_LAST) {
+        ui->held[pressed] = true;
     }
     ui->settings_view = (MainUIViewport){ui->settings.count, ui->settings.selected,
                                          ui->settings.start, ui->settings.start + 5};
@@ -1337,7 +1330,8 @@ bool mainui_dispatch_event(MainUIApp *ui, SDL_Event *event)
         if (event->type == SDL_KEYUP && mainui_input_key(event->key.keysym.sym) == SDLK_RETURN) {
             ui->search_confirm_held = false;
         }
-        if (event->type == SDL_KEYDOWN && mainui_input_key(event->key.keysym.sym) == SDLK_ESCAPE) {
+        SDLKey cancel = mainui_input_key(event->key.keysym.sym);
+        if (event->type == SDL_KEYDOWN && (cancel == SDLK_ESCAPE || cancel == SDLK_LSHIFT)) {
             mainui_catalog_job_cancel(&ui->catalog_job);
             ui->catalog_generation++;
         }
