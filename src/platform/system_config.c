@@ -38,6 +38,51 @@ cJSON *mainui_system_read(const char *sd)
     return root;
 }
 
+/* Exactly eight comma-separated names, each one the default names. */
+static bool keymap_valid(const char *value)
+{
+    static const char *const names[] = {"L2", "L", "R2", "R", "X", "A", "B", "Y"};
+    int count = 0;
+    for (const char *part = value;;) {
+        const char *end = strchr(part, ',');
+        size_t length = end ? (size_t)(end - part) : strlen(part);
+        bool known = false;
+        for (size_t i = 0; i < sizeof names / sizeof *names && !known; i++) {
+            known = strlen(names[i]) == length && !strncmp(part, names[i], length);
+        }
+        if (!known || ++count > 8) {
+            return false;
+        }
+        if (!end) {
+            return count == 8;
+        }
+        part = end + 1;
+    }
+}
+
+const char *mainui_keymap_value(const cJSON *settings)
+{
+    const cJSON *keymap = cJSON_GetObjectItemCaseSensitive(settings, "keymap");
+    const char *value = cJSON_IsString(keymap) ? keymap->valuestring : NULL;
+    return value && keymap_valid(value) ? value : MAINUI_DEFAULT_KEYMAP;
+}
+
+bool mainui_keymap_apply(const char *sd, const char *target)
+{
+    cJSON *settings = mainui_system_read(sd);
+    const cJSON *keymap = cJSON_GetObjectItemCaseSensitive(settings, "keymap");
+    if (cJSON_IsString(keymap) && *keymap->valuestring && !keymap_valid(keymap->valuestring)) {
+        fprintf(stderr, "Ignoring unusable keymap in system.json: %.80s\n", keymap->valuestring);
+    }
+    FILE *file = fopen(target, "w");
+    bool ok = file && fputs(mainui_keymap_value(settings), file) >= 0;
+    if (file && fclose(file) != 0) {
+        ok = false;
+    }
+    cJSON_Delete(settings);
+    return ok;
+}
+
 static const MainUISettingsMonitor *installed_monitor;
 
 void mainui_system_set_monitor(const MainUISettingsMonitor *monitor)

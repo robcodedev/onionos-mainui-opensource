@@ -2,6 +2,10 @@
 
 How the cursor and the visible window move in Open MainUI. Where this differs from stock MainUI, it is on purpose: the aim is a UI that behaves predictably, not a copy of every stock quirk.
 
+## Button mapping
+
+At start, as stock does, MainUI hands the `keymap` in `system.json` (default `L2,L,R2,R,X,A,B,Y`) to the device's button driver, which remaps the physical buttons for MainUI and every other program. A remapped button, such as X set to act as B, then does on every screen what the button it is mapped to does. A missing `keymap`, or one that is not eight comma-separated names from the default (`L2`, `L`, `R2`, `R`, `X`, `A`, `B`, `Y`, repeats allowed), hands over the default. Stock hands over any string, which could leave the buttons unusable everywhere until MainUI starts again. The tables below name the buttons after mapping.
+
 ## Console grids
 
 The Games grid shows 4 columns by 2 rows per page, the Expert grid 3 by 3.

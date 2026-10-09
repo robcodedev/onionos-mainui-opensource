@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "core/core.h"
 #include "platform/device_adapter.h"
+#include "platform/system_config.h"
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -152,7 +153,27 @@ int mainui_suite_core(void)
     MainUIStack again;
     CHECK(mainui_state_parse(json, &again) && again.count == 1 && again.frames[0].title == 157);
     free(json);
+    /* The button mapping handed to the driver: as configured, else stock's. */
+    const char *keymaps[][2] = {
+        {"{\"keymap\":\"L2,L,R2,R,B,A,B,Y\"}", "L2,L,R2,R,B,A,B,Y"},
+        {"{}", MAINUI_DEFAULT_KEYMAP},
+        {"{\"keymap\":\"\"}", MAINUI_DEFAULT_KEYMAP},
+        {"{\"keymap\":8}", MAINUI_DEFAULT_KEYMAP},
+        {"{\"keymap\":\"L2,L,R2,R,X,A,B\"}", MAINUI_DEFAULT_KEYMAP},
+        {"{\"keymap\":\"L2,L,R2,R,X,A,B,Y,Y\"}", MAINUI_DEFAULT_KEYMAP},
+        {"{\"keymap\":\"L2,L,R2,R,X,A,B,Z\"}", MAINUI_DEFAULT_KEYMAP},
+        {"{\"keymap\":\"L2,L,R2,R,,A,B,Y\"}", MAINUI_DEFAULT_KEYMAP},
+        {"{\"keymap\":\"L2,L,R2,R,X,A,B,Y,\"}", MAINUI_DEFAULT_KEYMAP},
+        {"{\"keymap\":\"l2,l,r2,r,x,a,b,y\"}", MAINUI_DEFAULT_KEYMAP},
+        {"{\"keymap\":\"Y,Y,Y,Y,Y,Y,Y,Y\"}", "Y,Y,Y,Y,Y,Y,Y,Y"},
+    };
+    for (size_t i = 0; i < sizeof keymaps / sizeof *keymaps; ++i) {
+        cJSON *settings = cJSON_Parse(keymaps[i][0]);
+        CHECK(settings && !strcmp(mainui_keymap_value(settings), keymaps[i][1]));
+        cJSON_Delete(settings);
+    }
+    CHECK(!strcmp(mainui_keymap_value(NULL), MAINUI_DEFAULT_KEYMAP));
     puts("core tests passed (configuration, devices, viewport properties, marquee bounds, state "
-         "codec)");
+         "codec, button mapping)");
     return 0;
 }

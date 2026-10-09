@@ -40,6 +40,17 @@ typedef struct {
 } MainUISettingsMonitor;
 
 void mainui_system_set_monitor(const MainUISettingsMonitor *monitor);
+/* Stock hands system.json's "keymap" to the button driver when it starts
+ * (mainui_keymap_apply); the driver then remaps the buttons for every
+ * program reading them. The value to hand over: the configured string when
+ * it is eight comma-separated names from the default, otherwise stock's
+ * default "L2,L,R2,R,X,A,B,Y". Stock writes any string unchecked; a bad one
+ * could leave the buttons unusable until MainUI starts again. */
+#define MAINUI_DEFAULT_KEYMAP "L2,L,R2,R,X,A,B,Y"
+const char *mainui_keymap_value(const cJSON *settings);
+/* Write that value for the system.json of `sd` to `target`, the driver's
+ * button_config parameter on the device. False when it cannot be written. */
+bool mainui_keymap_apply(const char *sd, const char *target);
 /* system.json exists but its content cannot be used (not a JSON object, NUL
  * bytes, too large), as opposed to missing, blank or an I/O error. Nothing
  * resets or rewrites it: it holds settings other programs share. */

@@ -602,6 +602,13 @@ void mainui_setup_render(MainUIApp *ui)
         fprintf(stderr, "Cannot read Menu releases from /dev/input/event0; Menu opens no "
                         "context menu\n");
     }
+    /* As stock at start: the button mapping in system.json goes to the button
+     * driver, which remaps the buttons (X as B, say) for every program. Nothing
+     * else in Onion writes it. */
+    if (ui->real_device && !ui->snapshot && ui->sd &&
+        !mainui_keymap_apply(ui->sd, "/sys/module/gpio_keys_polled/parameters/button_config")) {
+        fprintf(stderr, "Cannot hand the button mapping to the button driver\n");
+    }
     /* Snapshot tests stay silent. Playback is optional on the host. */
     if (!ui->snapshot) {
         cJSON *system_config = mainui_system_read(ui->sd ? ui->sd : ".");
