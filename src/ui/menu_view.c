@@ -400,9 +400,10 @@ void mainui_menu_draw_systems(MainUIMenuView *view, SDL_Surface *screen, MainUIC
         int y = (expert ? 60 : 75) + (i / columns) * height;
         SDL_Surface *icon = view->console_icons[i][selected];
         if (expert) {
+            /* Stock draws the mark 2 px right and down of the centered spot. */
             SDL_Surface *mark = selected ? theme->expert_selection : NULL;
             if (mark) {
-                blit(screen, mark, x + (width - mark->w) / 2, y + (height - mark->h) / 2);
+                blit(screen, mark, x + (width - mark->w) / 2 + 2, y + (height - mark->h) / 2 + 2);
             }
         }
         else if (theme->tiles[selected]) {
@@ -414,7 +415,8 @@ void mainui_menu_draw_systems(MainUIMenuView *view, SDL_Surface *screen, MainUIC
                 int w = icon->w < 192 ? icon->w : 192, h = icon->h < 72 ? icon->h : 72;
                 SDL_Rect source = {(Sint16)((icon->w - w) / 2), (Sint16)((icon->h - h) / 2),
                                    (Uint16)w, (Uint16)h};
-                SDL_Rect dest = {(Sint16)(x + (width - w) / 2), (Sint16)(y + (height - h) / 2 - 10),
+                /* 1 px lower than the Games icons' rule, as stock. */
+                SDL_Rect dest = {(Sint16)(x + (width - w) / 2), (Sint16)(y + (height - h) / 2 - 9),
                                  0, 0};
                 SDL_BlitSurface(icon, &source, screen, &dest);
             }
@@ -424,11 +426,12 @@ void mainui_menu_draw_systems(MainUIMenuView *view, SDL_Surface *screen, MainUIC
         }
         SDL_Surface *label = view->console_labels[i][selected];
         if (label) {
+            /* Expert labels sit 1 px lower than this rule gives, as stock's. */
+            int label_y = y + height - label_offset + (18 - label->h) / 2 + (expert ? 1 : 0);
             SDL_Rect clip = {(Sint16)x, (Sint16)(y + height - label_offset - 15), (Uint16)width,
                              50};
             SDL_SetClipRect(screen, &clip);
-            blit(screen, label, x + (width - label->w) / 2,
-                 y + height - label_offset + (18 - label->h) / 2);
+            blit(screen, label, x + (width - label->w) / 2, label_y);
             SDL_SetClipRect(screen, NULL);
         }
     }
