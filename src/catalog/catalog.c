@@ -553,7 +553,9 @@ static bool scan_directory(MainUICatalogPage *page, const char *sd, int mode, bo
         }
     }
     closedir(dir);
-    if (ok && page->count > 1) {
+    /* Apps keep the order the card lists their folders in, as stock does:
+     * it appends each app as readdir() returns it and never sorts them. */
+    if (ok && page->count > 1 && mode != 2) {
         qsort(page->entries, (size_t)page->count, sizeof *page->entries,
               sensitive ? order_case : order_nocase);
     }
@@ -679,9 +681,21 @@ static bool optional_catalog(MainUICatalog *catalog, const char *sd, bool sensit
     return ok;
 }
 
+/* Apps keep the card's folder order, as in stock; the flag file
+ * .tmp_update/config/.appsort sorts them A-Z, as the other lists are. */
 bool mainui_catalog_apps(MainUICatalog *catalog, const char *sd, bool sensitive)
 {
-    return optional_catalog(catalog, sd, sensitive, "App", "Apps", 2);
+    if (!optional_catalog(catalog, sd, sensitive, "App", "Apps", 2)) {
+        return false;
+    }
+    MainUICatalogPage *page = &catalog->pages[0];
+    char flag[MAINUI_PATH_MAX];
+    if (page->count > 1 && mainui_catalog_path(flag, sd, sd, ".tmp_update/config/.appsort") &&
+        access(flag, F_OK) == 0) {
+        qsort(page->entries, (size_t)page->count, sizeof *page->entries,
+              sensitive ? order_case : order_nocase);
+    }
+    return true;
 }
 
 bool mainui_catalog_expert(MainUICatalog *catalog, const char *sd, bool sensitive)
