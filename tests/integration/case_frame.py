@@ -39,6 +39,14 @@ assert home.getpixel((596,30))==(0,255,0)
 assert capture('low','20').getpixel((596,30))==(0,0,255)
 assert capture('charging','500').getpixel((596,30))==(255,255,0)
 assert capture('hidden','-1').getpixel((596,30))==(10,20,30)
+# miyoo-topbar.png is drawn unclipped at (20, (60-h)/2), as stock does: a tall
+# logo shows below the header too (Super Onion Entertainment System's dots).
+tall=Image.new('RGBA',(640,781),(0,0,0,0))
+tall.paste((200,100,0,255),(100,750,111,759))
+tall.save(THEME/'skin/miyoo-topbar.png')
+dots=capture('tall-logo')
+assert dots.getpixel((125,395))==(200,100,0) and dots.getpixel((125,399))!=(200,100,0)
+Image.new('RGB',(20,20),(255,0,0)).save(THEME/'skin/miyoo-topbar.png')
 list_image=capture('list',system=True)
 # NES title is centered independently of the left logo slot and battery.
 points=[(x,y) for y in range(60) for x in range(200,440) if min(list_image.getpixel((x,y)))>200]

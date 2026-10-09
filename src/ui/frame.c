@@ -164,6 +164,10 @@ static void draw_header_image(SDL_Surface *screen, MainUITheme *theme, SDL_Surfa
         }
     }
     else if (theme->logo) {
+        /* Stock (0x170a0) blits miyoo-topbar.png unclipped: themes draw past
+         * the header with a tall image (Super Onion Entertainment System's
+         * page dots), as the home screen's later drawing goes on top. */
+        SDL_SetClipRect(screen, NULL);
         mainui_blit(screen, theme->logo, 20, (60 - theme->logo->h) / 2);
     }
     clip.x = 0;
