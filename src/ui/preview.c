@@ -34,6 +34,7 @@ static bool image_path(char out[MAINUI_PATH_MAX], MainUICatalog *catalog,
     }
     const char *rom = NULL, *images = NULL, *saved = NULL;
     const char *root = catalog->sd;
+    bool directory = false;
     if (library) {
         if (selected >= library->visible_count || mainui_library_is_folder(library, selected)) {
             return false;
@@ -60,9 +61,10 @@ static bool image_path(char out[MAINUI_PATH_MAX], MainUICatalog *catalog,
             return false;
         }
         MainUIEntry *entry = mainui_catalog_entry(catalog, selected);
-        if (!entry || entry->directory) {
+        if (!entry || (entry->directory && catalog->depth != 1)) {
             return false;
         }
+        directory = entry->directory;
         rom = entry->path;
         saved = entry->artwork;
         /* Search results name their source console's artwork directory. */
