@@ -836,8 +836,11 @@ static bool cache_scan(sqlite3_stmt *insert, MainUICatalog *catalog, const char 
         }
         const char *file = strrchr(entry->path, '/') + 1;
         const char *dot = strrchr(file, '.');
-        int image_length = 0;
-        if (!entry->directory) {
+        int image_length;
+        if (entry->directory) {
+            image_length = snprintf(image, MAINUI_PATH_MAX, "%s/%s.png", image_prefix, file);
+        }
+        else {
             image_length = snprintf(image, MAINUI_PATH_MAX, "%s/%.*s.png", image_prefix,
                                     (int)(dot ? (size_t)(dot - file) : strlen(file)), file);
         }
@@ -853,8 +856,7 @@ static bool cache_scan(sqlite3_stmt *insert, MainUICatalog *catalog, const char 
         sqlite3_clear_bindings(insert);
         ok = sqlite3_bind_text(insert, 1, label, -1, SQLITE_TRANSIENT) == SQLITE_OK &&
              sqlite3_bind_text(insert, 2, relative, -1, SQLITE_TRANSIENT) == SQLITE_OK &&
-             sqlite3_bind_text(insert, 3, entry->directory ? relative : image, -1,
-                               SQLITE_TRANSIENT) == SQLITE_OK &&
+             sqlite3_bind_text(insert, 3, image, -1, SQLITE_TRANSIENT) == SQLITE_OK &&
              sqlite3_bind_int(insert, 4, entry->directory ? 1 : 0) == SQLITE_OK &&
              sqlite3_bind_text(insert, 5, parent, -1, SQLITE_TRANSIENT) == SQLITE_OK &&
              sqlite3_bind_text(insert, 6, pinyin, -1, SQLITE_TRANSIENT) == SQLITE_OK &&
